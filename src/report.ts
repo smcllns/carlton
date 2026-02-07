@@ -35,7 +35,7 @@ export function writeReport(filepath: string, content: string): void {
 export function formatBasicReport(event: CalendarEvent): string {
   const lines: string[] = [];
 
-  lines.push(`# ${event.summary}`);
+  lines.push(`# ☘️🦊 ${event.summary}`);
   lines.push("");
   lines.push(`**Time:** ${formatTime(event.start)} - ${formatTime(event.end)}`);
 
@@ -50,7 +50,7 @@ export function formatBasicReport(event: CalendarEvent): string {
   lines.push("");
 
   if (event.attendees.length > 0) {
-    lines.push("## Attendees");
+    lines.push("## ☘️ Attendees");
     lines.push("");
     for (const attendee of event.attendees) {
       lines.push(`- ${attendee}`);
@@ -59,7 +59,7 @@ export function formatBasicReport(event: CalendarEvent): string {
   }
 
   if (event.description) {
-    lines.push("## Description");
+    lines.push("## 🦊 Description");
     lines.push("");
     lines.push(event.description);
     lines.push("");

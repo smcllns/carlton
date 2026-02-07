@@ -23,7 +23,7 @@ const sampleEvent: CalendarEvent = {
 describe("formatBasicReport", () => {
   test("includes event title", () => {
     const report = formatBasicReport(sampleEvent);
-    expect(report).toContain("# Weekly Standup");
+    expect(report).toContain("# ☘️🦊 Weekly Standup");
   });
 
   test("includes time", () => {
@@ -58,7 +58,7 @@ describe("formatBasicReport", () => {
       attendees: [],
     };
     const report = formatBasicReport(minimal);
-    expect(report).toContain("# Quick Chat");
+    expect(report).toContain("# ☘️🦊 Quick Chat");
     expect(report).not.toContain("Location");
     expect(report).not.toContain("Attendees");
   });

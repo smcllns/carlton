@@ -12,7 +12,11 @@
       "Bash(bunx gdcli:*)",
       "Bash(mkdir -p:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Read(PROMPT.md)",
+      "Read(src/**)",
+      "Write(src/*.self.md)",
+      "Bash(bun carlton send-briefing:*)"
     ]
   }
 }

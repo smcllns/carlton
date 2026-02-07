@@ -8,6 +8,7 @@
  *   bun carlton send                    # Email tomorrow's briefing via Resend
  *   bun carlton send 2026-02-10         # Email briefing for specific date
  *   bun carlton serve                   # Poll for replies, spawn Claude in tmux windows (requires tmux)
+ *   bun carlton send-briefing 2026-02-10 # Send reports/<date>/briefing.md via email
  *   bun carlton reply-to <subj> <file>  # Send a threaded reply via Resend
  *   bun carlton setup                   # Check auth status
  *   bun carlton auth                    # Show setup instructions
@@ -35,7 +36,10 @@ import {
   replyFilePaths,
 } from "./reply.ts";
 import { resolve, join } from "path";
+import { createHash } from "crypto";
 import { $ } from "bun";
+import { runResearch } from "./research.ts";
+import { buildCuratorContext, spawnCurator } from "./curator.ts";
 
 function getTomorrow(): string {
   const d = new Date();
@@ -265,18 +269,8 @@ async function cmdPrep(date: string) {
   console.log(`\nReports written to: reports/${date}/`);
 }
 
-async function gitSnapshot(message: string) {
-  const root = getProjectRoot();
-  try {
-    await $`git -C ${root} add -A`.quiet();
-    await $`git -C ${root} commit -m ${message} --allow-empty`.quiet();
-  } catch {
-    // no changes to commit
-  }
-}
-
 async function cmdSend(date: string) {
-  console.log(`Carlton - Sending briefing for ${date}\n`);
+  console.log(`Carlton - Preparing briefing for ${date}\n`);
 
   const prompt = loadPrompt();
   const { events, reports } = await prepBriefing(date);
@@ -286,16 +280,51 @@ async function cmdSend(date: string) {
     return;
   }
 
-  console.log(`Found ${events.length} meeting(s). Preparing email...\n`);
+  console.log(`Found ${events.length} meeting(s).\n`);
 
-  const combined = reports.map((r) => r.content).join("\n\n---\n\n");
-  const subject = `Carlton: ${date} Meeting Briefing (${events.length} meetings)`;
+  if (!process.env.TMUX) {
+    console.log("Not in tmux — sending basic briefing (no research/curator).\n");
+    const combined = reports.map((r) => r.content).join("\n\n---\n\n");
+    const subject = `Carlton: ${date} Meeting Briefing (${events.length} meetings)`;
+    const messageId = await sendBriefing(prompt.delivery.email, subject, combined);
+    console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
+    console.log(`   Message ID: ${messageId}`);
+    return;
+  }
 
-  await gitSnapshot(`Send briefing: ${date} (${events.length} meetings).`);
+  console.log("Running research on each meeting...\n");
+  const researchResults = await runResearch(date, events, prompt);
 
-  const messageId = await sendBriefing(prompt.delivery.email, subject, combined);
+  const succeeded = researchResults.filter((r) => r.success).length;
+  const failed = researchResults.filter((r) => !r.success).length;
+  console.log(`Research complete: ${succeeded} succeeded, ${failed} failed.\n`);
+
+  const contextFile = join(getReportsDir(), date, "curator-context.md");
+  const context = buildCuratorContext(date, events, researchResults, prompt);
+  writeFileSync(contextFile, context, "utf8");
+  console.log(`Curator context written to: ${contextFile}\n`);
+
+  spawnCurator(date, contextFile);
+}
+
+async function cmdSendBriefing(date: string) {
+  const prompt = loadPrompt();
+  const briefingFile = join(getReportsDir(), date, "briefing.md");
+
+  if (!existsSync(briefingFile)) {
+    throw new Error(`No briefing found at ${briefingFile}. Run 'bun carlton send ${date}' first.`);
+  }
+
+  const markdown = readFileSync(briefingFile, "utf8");
+  const subject = `Carlton: ${date} Meeting Briefing`;
+  const messageId = await sendBriefing(prompt.delivery.email, subject, markdown);
   console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
   console.log(`   Message ID: ${messageId}`);
+}
+
+function replyContentHash(msg: any): string {
+  const input = [msg.from || "", msg.subject || "", msg.snippet || "", msg.date || ""].join("|");
+  return createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
 
 function extractMessageBody(message: any): string {
@@ -413,8 +442,9 @@ async function cmdServe() {
 
         for (const thread of results.threads) {
           for (const msg of thread.messages) {
-            if (processedIds.has(msg.id)) continue;
-            processedIds.add(msg.id);
+            const hash = replyContentHash(msg);
+            if (processedIds.has(hash)) continue;
+            processedIds.add(hash);
 
             const isFromUser = !msg.from?.includes("resend.dev");
             if (!isFromUser) continue;
@@ -451,8 +481,6 @@ async function cmdServe() {
 async function cmdReplyTo(subject: string, bodyFile: string) {
   const prompt = loadPrompt();
   const body = readFileSync(bodyFile, "utf8");
-
-  await gitSnapshot(`Send reply: ${subject.slice(0, 60)}.`);
 
   const messageId = await sendReply(prompt.delivery.email, subject, body, "");
   console.log(`✅ Reply sent to ${prompt.delivery.email}`);
@@ -497,6 +525,9 @@ if (!command) {
 } else if (command === "send") {
   const date = args[1] && isValidDate(args[1]) ? args[1] : getTomorrow();
   await cmdSend(date);
+} else if (command === "send-briefing") {
+  const date = args[1] && isValidDate(args[1]) ? args[1] : getTomorrow();
+  await cmdSendBriefing(date);
 } else if (command === "serve") {
   await cmdServe();
 } else if (command === "reply-to") {
@@ -511,6 +542,6 @@ if (!command) {
   await cmdPrep(command);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|serve|reply-to <subject> <file>]");
+  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|reply-to <subject> <file>]");
   process.exit(1);
 }

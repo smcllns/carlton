@@ -21,27 +21,30 @@ bun carlton setup                             # Verify auth
 ## Usage
 
 ```bash
-bun carlton                   # Prep for tomorrow
-bun carlton 2026-02-10        # Prep for specific date
-bun carlton send              # Email tomorrow's briefing via Resend
-bun carlton send 2026-02-10   # Email briefing for specific date
-bun carlton serve             # Poll for email replies and respond
-bun carlton setup             # Check auth status
-bun carlton auth              # Setup instructions
-bun carlton credentials       # Register OAuth credentials
-bun carlton accounts add <e>  # Add a Google account
-bun test                      # Run tests
+bun carlton                          # Prep for tomorrow (send + serve)
+bun carlton 2026-02-10               # Prep for specific date (local only)
+bun carlton send                     # Research + curate + email tomorrow's briefing
+bun carlton send 2026-02-10          # Research + curate + email for specific date
+bun carlton send-briefing 2026-02-10 # Send an already-written briefing.md
+bun carlton serve                    # Poll for email replies, spawn Claude in tmux
+bun carlton reply-to <subj> <file>   # Send a threaded reply via Resend
+bun carlton setup                    # Check auth status
+bun carlton auth                     # Setup instructions
+bun carlton credentials              # Register OAuth credentials
+bun carlton accounts add <e>         # Add a Google account
+bun test                             # Run tests
 ```
 
-Reports are written to `reports/YYYY-MM-DD/HH-MM-meeting-title.md`.
+Reports are written to `reports/YYYY-MM-DD/`.
 
 ## Overview
 
 Carlton is a read-only meeting prep CLI that:
 1. Fetches calendar events for a target day (default: tomorrow) across **multiple Google accounts**
-2. Researches each meeting's attendees and context via Gmail, Google Calendar, and Google Drive
-3. Generates a meeting briefing `.md` file per meeting
-4. Learns user preferences over time via a persistent `memory.txt`
+2. Spawns parallel Claude agents (haiku) to research each meeting via Gmail, Calendar, and Drive
+3. Hands research to a curator agent that compiles a polished briefing and sends it via email
+4. Monitors for email replies — spawns interactive Claude sessions to research and respond
+5. Learns user preferences over time via a persistent `memory.txt`
 
 ## Core Principles
 
@@ -96,12 +99,19 @@ carlton/
 │   ├── google.ts         # Service wrappers (gmail, calendar, drive)
 │   ├── calendar.ts       # Multi-account event fetching + dedup
 │   ├── report.ts         # Report generation + file output
+│   ├── research.ts       # Parallel per-meeting research via Claude agents
+│   ├── curator.ts        # Curator agent context builder + spawner
+│   ├── reply.ts          # Reply thread handling (numbering, context, history)
 │   ├── prompt.ts         # PROMPT.md parser
 │   ├── email.ts          # Resend email delivery (isolated from Google)
 │   └── *.test.ts         # Tests
-├── reports/
+├── reports/              # All output (gitignored, local only)
 │   ├── [YYYY-MM-DD]/
-│   │   └── [HH-MM-meeting-title].md
+│   │   ├── [HH-MM-meeting-title].md  # Per-meeting report
+│   │   ├── research/                  # Research agent output
+│   │   ├── briefing.md                # Curator's compiled briefing
+│   │   ├── curator-context.md         # Context passed to curator
+│   │   └── responses/                 # Reply thread files (01-reply.md, 01-response.md, ...)
 │   └── memory.txt
 ├── PROMPT.md             # User config (accounts, delivery, format)
 ├── .env                  # RESEND_API_KEY (gitignored)
@@ -140,16 +150,19 @@ carlton/
 - [x] Email delivery via Resend (`bun carlton send`)
 - [x] `src/email.ts` isolated from Google services (safety-tested)
 - [x] Reply polling loop (`bun carlton serve`)
-- [ ] **User test:** Send a briefing, reply to it, verify Carlton detects the reply
+- [x] Reply handler spawns interactive Claude in tmux windows
+- [x] Thread history tracking (numbered exchanges)
+- [x] Content-hash dedup for reply detection
+- [x] **User test:** Full reply loop tested — briefing, replies, research replies all working
 
 ### Milestone 3: Cross-Service Research
 **Goal:** For each meeting, pull context from Gmail, Calendar history, and Google Drive.
 
-- [ ] For each attendee, search Gmail for recent threads
-- [ ] Search Drive for documents mentioning attendees or meeting topic
-- [ ] Pull calendar history (past meetings with same attendees)
-- [ ] Add research results to report files
-- [ ] **User test:** Review reports, confirm useful context is being pulled
+- [x] Parallel research agents (Claude haiku) per meeting
+- [x] Research prompt with CLI tool instructions for gmcli, gccli, gdcli
+- [x] Curator agent compiles research into polished briefing
+- [x] `send-briefing` command for sending curator output
+- [ ] **User test:** Review research quality, tune research instructions in PROMPT.md
 
 ### Milestone 4: Building Great Meeting Prep Docs
 **Goal:** Learn what the user actually wants in prep docs. Iterate on format, content, emphasis. Systematically log all preferences,  learnings, and user corrections. Then periodically sumamrize those to build a playbook that works well all the time.
