@@ -63,4 +63,17 @@ describe("read-only safety", () => {
       expect(content).not.toContain("createEvent");
     }
   });
+
+  test("email.ts does not import google.ts or Google services", () => {
+    const emailFile = path.join(SRC_DIR, "email.ts");
+    if (!fs.existsSync(emailFile)) return;
+    const content = fs.readFileSync(emailFile, "utf8");
+    expect(content).not.toContain("./google");
+    expect(content).not.toContain("getGmail");
+    expect(content).not.toContain("getCalendar");
+    expect(content).not.toContain("getDrive");
+    expect(content).not.toContain("@mariozechner/gmcli");
+    expect(content).not.toContain("@mariozechner/gccli");
+    expect(content).not.toContain("@mariozechner/gdcli");
+  });
 });

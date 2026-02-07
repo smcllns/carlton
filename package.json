@@ -9,12 +9,15 @@
   "scripts": {
     "start": "bun src/index.ts",
     "test": "bun test",
+    "build": "bun build --compile src/index.ts --outfile carlton",
     "carlton": "bun src/index.ts"
   },
   "dependencies": {
-    "@mariozechner/gmcli": "^0.2.0",
     "@mariozechner/gccli": "^0.1.2",
-    "@mariozechner/gdcli": "^0.1.1"
+    "@mariozechner/gdcli": "^0.1.1",
+    "@mariozechner/gmcli": "^0.2.0",
+    "marked": "^17.0.1",
+    "resend": "^6.9.1"
   },
   "devDependencies": {
     "@types/bun": "latest",

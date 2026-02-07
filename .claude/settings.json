@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(reports/**)",
+      "Write(reports/**)",
+      "Edit(reports/**)",
+      "Read(.carlton-reply.md)",
+      "Bash(bun carlton reply-to:*)",
+      "Bash(bun carlton send:*)",
+      "Bash(bunx gmcli:*)",
+      "Bash(bunx gccli:*)",
+      "Bash(bunx gdcli:*)",
+      "Bash(mkdir -p:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

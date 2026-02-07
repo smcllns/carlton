@@ -5,6 +5,10 @@
  * Usage:
  *   bun carlton                          # Prep for tomorrow's meetings
  *   bun carlton 2026-02-10              # Prep for a specific date
+ *   bun carlton send                    # Email tomorrow's briefing via Resend
+ *   bun carlton send 2026-02-10         # Email briefing for specific date
+ *   bun carlton serve                   # Poll for email replies, spawn Claude
+ *   bun carlton reply-to <subj> <file>  # Send a threaded reply via Resend
  *   bun carlton setup                   # Check auth status
  *   bun carlton auth                    # Show setup instructions
  *   bun carlton credentials             # Register OAuth credentials
@@ -12,13 +16,17 @@
  */
 
 import { checkAuth } from "./google.ts";
-import { getEventsForDate } from "./calendar.ts";
+import { getEventsForDate, type CalendarEvent } from "./calendar.ts";
 import {
   createReportFiles,
   writeReport,
   formatBasicReport,
 } from "./report.ts";
-import { existsSync, readdirSync } from "fs";
+import { loadPrompt, type PromptConfig } from "./prompt.ts";
+import { sendBriefing, sendReply } from "./email.ts";
+import { getGmail } from "./google.ts";
+import { getProjectRoot, getReportsDir } from "./config.ts";
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { resolve, join } from "path";
 import { $ } from "bun";
 
@@ -118,7 +126,7 @@ STEP 4: Verify auth setup and permissions
 }
 
 async function cmdCredentials() {
-  const credDir = resolve(import.meta.dir, "../credentials");
+  const credDir = join(getProjectRoot(), "credentials");
   const jsonFiles = readdirSync(credDir).filter(f => f.endsWith(".json") && f !== ".gitkeep" && f !== "example.json");
 
   if (jsonFiles.length === 0) {
@@ -190,22 +198,43 @@ async function cmdAccountsAdd(email: string) {
   console.log(`All done. Verify with: bun carlton setup`);
 }
 
+interface PrepResult {
+  events: CalendarEvent[];
+  reports: { event: CalendarEvent; content: string; filepath: string }[];
+}
+
+async function prepBriefing(date: string): Promise<PrepResult> {
+  const auth = checkAuth();
+  if (auth.calendar.length === 0) {
+    throw new Error("No calendar accounts configured. Run: bun carlton auth");
+  }
+
+  console.log(`Checking calendars for: ${auth.calendar.join(", ")}\n`);
+
+  const events = await getEventsForDate(date);
+
+  if (events.length === 0) {
+    return { events: [], reports: [] };
+  }
+
+  const paths = createReportFiles(date, events);
+  const reports: PrepResult["reports"] = [];
+
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    const filepath = paths[i];
+    const content = formatBasicReport(event);
+    writeReport(filepath, content);
+    reports.push({ event, content, filepath });
+  }
+
+  return { events, reports };
+}
+
 async function cmdPrep(date: string) {
   console.log(`Carlton - Preparing for ${date}\n`);
 
-  // Check auth first
-  const auth = checkAuth();
-  if (auth.calendar.length === 0) {
-    console.error("No calendar accounts configured. Run: bun carlton auth");
-    process.exit(1);
-  }
-
-  console.log(
-    `Checking calendars for: ${auth.calendar.join(", ")}\n`
-  );
-
-  // Fetch events
-  const events = await getEventsForDate(date);
+  const { events, reports } = await prepBriefing(date);
 
   if (events.length === 0) {
     console.log("No meetings found for this date.");
@@ -214,23 +243,245 @@ async function cmdPrep(date: string) {
 
   console.log(`Found ${events.length} meeting(s):\n`);
 
-  // Create report files
-  const paths = createReportFiles(date, events);
-
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    const filepath = paths[i];
-
+  for (const { event } of reports) {
     console.log(
       `  ${formatTimeShort(event.start)} ${event.summary} (${event.attendees.length} attendees)`
     );
-
-    // Write basic report (Milestone 1-2: just calendar data)
-    const content = formatBasicReport(event);
-    writeReport(filepath, content);
   }
 
   console.log(`\nReports written to: reports/${date}/`);
+}
+
+async function gitSnapshot(message: string) {
+  const root = getProjectRoot();
+  try {
+    await $`git -C ${root} add -A`.quiet();
+    await $`git -C ${root} commit -m ${message} --allow-empty`.quiet();
+  } catch {
+    // no changes to commit
+  }
+}
+
+async function cmdSend(date: string) {
+  console.log(`Carlton - Sending briefing for ${date}\n`);
+
+  const prompt = loadPrompt();
+  const { events, reports } = await prepBriefing(date);
+
+  if (events.length === 0) {
+    console.log("No meetings found for this date. Nothing to send.");
+    return;
+  }
+
+  console.log(`Found ${events.length} meeting(s). Preparing email...\n`);
+
+  const combined = reports.map((r) => r.content).join("\n\n---\n\n");
+  const subject = `Carlton: ${date} Meeting Briefing (${events.length} meetings)`;
+
+  await gitSnapshot(`Send briefing: ${date} (${events.length} meetings).`);
+
+  const messageId = await sendBriefing(prompt.delivery.email, subject, combined);
+  console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
+  console.log(`   Message ID: ${messageId}`);
+}
+
+function extractMessageBody(message: any): string {
+  const payload = message.payload;
+  if (!payload) return message.snippet || "";
+
+  if (payload.body?.data) {
+    return Buffer.from(payload.body.data, "base64url").toString("utf8");
+  }
+
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      if (part.mimeType === "text/plain" && part.body?.data) {
+        return Buffer.from(part.body.data, "base64url").toString("utf8");
+      }
+      if (part.parts) {
+        for (const subpart of part.parts) {
+          if (subpart.mimeType === "text/plain" && subpart.body?.data) {
+            return Buffer.from(subpart.body.data, "base64url").toString("utf8");
+          }
+        }
+      }
+    }
+  }
+
+  return message.snippet || "";
+}
+
+function parseDateFromSubject(subject: string): string | null {
+  const match = subject.match(/(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+function nextResponseNumber(responsesDir: string): number {
+  if (!existsSync(responsesDir)) return 1;
+  const files = readdirSync(responsesDir).filter((f) => f.match(/^\d+-reply\.md$/));
+  return files.length + 1;
+}
+
+async function handleReply(account: string, threadId: string, msg: any) {
+  const gmail = getGmail();
+  const projectRoot = getProjectRoot();
+
+  let replyBody = msg.snippet || "";
+  try {
+    const fullThread = await gmail.getThread(account, threadId);
+    if (!Array.isArray(fullThread) && fullThread.messages) {
+      const fullMsg = fullThread.messages.find((m: any) => m.id === msg.id);
+      if (fullMsg) replyBody = extractMessageBody(fullMsg);
+    }
+  } catch (err: any) {
+    console.error(`  Could not fetch full thread: ${err.message}`);
+  }
+
+  const date = parseDateFromSubject(msg.subject || "") || getTomorrow();
+  const responsesDir = join(getReportsDir(), date, "responses");
+  mkdirSync(responsesDir, { recursive: true });
+
+  const num = nextResponseNumber(responsesDir);
+  const replyFile = join(responsesDir, `${String(num).padStart(2, "0")}-reply.md`);
+  const responseFile = join(responsesDir, `${String(num).padStart(2, "0")}-response.md`);
+
+  writeFileSync(replyFile, `# User Reply #${num}
+
+**From:** ${msg.from}
+**Date:** ${msg.date || new Date().toISOString()}
+**Subject:** ${msg.subject}
+
+${replyBody}
+`, "utf8");
+
+  const contextFile = join(projectRoot, ".carlton-reply.md");
+  const context = `# User Reply to Carlton Briefing
+
+**From:** ${msg.from}
+**Subject:** ${msg.subject}
+**Date:** ${msg.date || new Date().toISOString()}
+**Account:** ${account}
+**Thread ID:** ${threadId}
+**Message ID:** ${msg.id}
+**Briefing Date:** ${date}
+
+## Reply Content
+
+${replyBody}
+
+## Data Files
+
+- User's reply saved to: ${replyFile}
+- Write your response to: ${responseFile}
+- Meeting reports in: reports/${date}/
+
+## Instructions
+
+The user replied to a Carlton meeting briefing email. Your job:
+
+1. Read the user's reply above and understand what they're asking for
+2. Check the report files in reports/${date}/ for context on the meetings
+3. Use the CLI tools to research what the user asked about:
+   - \`bunx gmcli\` for Gmail search (read-only)
+   - \`bunx gccli\` for Calendar (read-only)
+   - \`bunx gdcli\` for Google Drive (read-only)
+   - All tools support \`--help\` for usage
+4. Update the relevant report file with your findings
+5. Write your response to ${responseFile}, then send it: \`bun carlton reply-to "${msg.subject}" ${responseFile}\`
+6. Log what you learned to reports/memory.txt
+`;
+
+  writeFileSync(contextFile, context, "utf8");
+
+  console.log(`🤖 Spawning Claude to handle reply...`);
+  try {
+    const proc = Bun.spawn(
+      ["claude", "A user replied to a Carlton briefing email. Read .carlton-reply.md for the full context and instructions."],
+      {
+        cwd: projectRoot,
+        stdio: ["inherit", "inherit", "inherit"],
+      }
+    );
+    await proc.exited;
+    console.log(`✅ Claude finished handling reply`);
+  } catch (err: any) {
+    console.error(`❌ Claude failed: ${err.message}`);
+  }
+}
+
+async function cmdServe() {
+  const prompt = loadPrompt();
+  const gmail = getGmail();
+  const accounts = gmail.listAccounts().map((a: any) => a.email);
+
+  if (accounts.length === 0) {
+    throw new Error("No Gmail accounts configured. Run: bun carlton auth");
+  }
+
+  console.log("Carlton - Listening for email replies...");
+  console.log(`  Monitoring: ${accounts.join(", ")}`);
+  console.log(`  Delivery to: ${prompt.delivery.email}\n`);
+
+  const idsFile = join(getProjectRoot(), ".carlton-processed-ids");
+  const processedIds = new Set<string>(
+    existsSync(idsFile)
+      ? readFileSync(idsFile, "utf8").split("\n").filter(Boolean)
+      : []
+  );
+  const persistIds = () => writeFileSync(idsFile, [...processedIds].join("\n"), "utf8");
+
+  const POLL_INTERVAL = 30_000;
+  let busy = false;
+
+  const poll = async () => {
+    if (busy) return;
+
+    for (const account of accounts) {
+      try {
+        const results = await gmail.searchThreads(
+          account,
+          "subject:(Carlton Meeting Briefing)",
+          10
+        );
+
+        for (const thread of results.threads) {
+          for (const msg of thread.messages) {
+            if (processedIds.has(msg.id)) continue;
+            processedIds.add(msg.id);
+
+            const isFromUser = !msg.from?.includes("resend.dev");
+            if (!isFromUser) continue;
+
+            console.log(`📩 Reply from ${msg.from}: ${msg.subject}`);
+            console.log(`   "${(msg.snippet || "").slice(0, 100)}"`);
+            persistIds();
+
+            busy = true;
+            await handleReply(account, thread.id, msg);
+            busy = false;
+          }
+        }
+      } catch (err: any) {
+        console.error(`  Error polling ${account}: ${err.message}`);
+      }
+    }
+  };
+
+  while (true) {
+    await poll();
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+  }
+}
+
+async function cmdReplyTo(subject: string, bodyFile: string) {
+  const prompt = loadPrompt();
+  const body = readFileSync(bodyFile, "utf8");
+
+  await gitSnapshot(`Send reply: ${subject.slice(0, 60)}.`);
+
+  const messageId = await sendReply(prompt.delivery.email, subject, body, "");
+  console.log(`✅ Reply sent to ${prompt.delivery.email}`);
+  console.log(`   Message ID: ${messageId}`);
 }
 
 function formatTimeShort(iso: string): string {
@@ -239,13 +490,27 @@ function formatTimeShort(iso: string): string {
   return match ? match[1] : iso;
 }
 
+async function cmdRun() {
+  const date = getTomorrow();
+  console.log(`Carlton - Starting up\n`);
+
+  try {
+    await cmdSend(date);
+  } catch (err: any) {
+    console.error(`⚠️  Could not send briefing: ${err.message}\n`);
+  }
+
+  console.log("");
+  await cmdServe();
+}
+
 // --- Main ---
 
 const args = process.argv.slice(2);
 const command = args[0];
 
 if (!command) {
-  await cmdPrep(getTomorrow());
+  await cmdRun();
 } else if (command === "setup") {
   await cmdSetup();
 } else if (command === "auth") {
@@ -254,10 +519,23 @@ if (!command) {
   await cmdCredentials();
 } else if (command === "accounts" && args[1] === "add") {
   await cmdAccountsAdd(args[2]);
+} else if (command === "send") {
+  const date = args[1] && isValidDate(args[1]) ? args[1] : getTomorrow();
+  await cmdSend(date);
+} else if (command === "serve") {
+  await cmdServe();
+} else if (command === "reply-to") {
+  const subject = args[1];
+  const bodyFile = args[2];
+  if (!subject || !bodyFile) {
+    console.error("Usage: bun carlton reply-to <subject> <body-file.md>");
+    process.exit(1);
+  }
+  await cmdReplyTo(subject, bodyFile);
 } else if (isValidDate(command)) {
   await cmdPrep(command);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>]");
+  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|serve|reply-to <subject> <file>]");
   process.exit(1);
 }

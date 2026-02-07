@@ -23,6 +23,9 @@ bun carlton setup                             # Verify auth
 ```bash
 bun carlton                   # Prep for tomorrow
 bun carlton 2026-02-10        # Prep for specific date
+bun carlton send              # Email tomorrow's briefing via Resend
+bun carlton send 2026-02-10   # Email briefing for specific date
+bun carlton serve             # Poll for email replies and respond
 bun carlton setup             # Check auth status
 bun carlton auth              # Setup instructions
 bun carlton credentials       # Register OAuth credentials
@@ -42,10 +45,20 @@ Carlton is a read-only meeting prep CLI that:
 
 ## Core Principles
 
-- **Read-only.** Carlton never sends emails, creates drafts, edits calendar events, or deletes anything. Hard-coded guardrails enforce this.
+- **Read-only on user data.** Carlton never sends emails from the user's Gmail, creates drafts, edits calendar events, or deletes anything. Hard-coded guardrails enforce this.
 - **Minimal and inspectable.** The user trusts this tool with sensitive data. Code must be simple, clear, and easy to audit.
 - **Multi-account.** The user has many Gmail/Calendar accounts. Carlton checks all of them.
 - **Learning system.** Each session appends to `memory.txt` what worked, what didn't, and what the user prefers. Future agents read this before starting.
+
+## Security Model
+
+Carlton separates **reading user data** from **sending output**:
+
+- **Google services (Gmail, Calendar, Drive) are read-only** — enforced by code, safety tests, and architecture. Carlton can search, list, and get. It cannot send, create, update, or delete.
+- **Email delivery uses Resend**, a separate transactional email API with its own API key (`RESEND_API_KEY`). Carlton sends briefings *to* the user — it cannot send *as* the user.
+- **`src/email.ts` is architecturally isolated from Google** — it cannot import `google.ts` or access Gmail/Calendar/Drive credentials. Safety tests enforce this boundary.
+- **Data flow:** Google (read) → Carlton (process) → Resend (send to user)
+- **Even a rogue agent cannot:** send email as the user, modify their calendar, delete their files, or access Google credentials from the email module.
 
 ## Tech Stack
 
@@ -56,6 +69,8 @@ Carlton is a read-only meeting prep CLI that:
 | Gmail | `@mariozechner/gmcli` (library import) |
 | Calendar | `@mariozechner/gccli` (library import) |
 | Drive | `@mariozechner/gdcli` (library import) |
+| Email delivery | `resend` (transactional API, separate from Gmail) |
+| Markdown→HTML | `marked` |
 | Testing | `bun:test` (TDD) |
 | Invocation | `bun carlton` (via package.json scripts) |
 
@@ -81,11 +96,16 @@ carlton/
 │   ├── google.ts         # Service wrappers (gmail, calendar, drive)
 │   ├── calendar.ts       # Multi-account event fetching + dedup
 │   ├── report.ts         # Report generation + file output
+│   ├── prompt.ts         # PROMPT.md parser
+│   ├── email.ts          # Resend email delivery (isolated from Google)
 │   └── *.test.ts         # Tests
 ├── reports/
 │   ├── [YYYY-MM-DD]/
 │   │   └── [HH-MM-meeting-title].md
 │   └── memory.txt
+├── PROMPT.md             # User config (accounts, delivery, format)
+├── .env                  # RESEND_API_KEY (gitignored)
+├── .env.example          # API key placeholder
 ├── CLAUDE.md             # Agent instructions
 ├── README.md             # This file
 ├── package.json
@@ -111,6 +131,16 @@ carlton/
 - [x] Deduplicate events appearing in multiple calendars
 - [x] Create `reports/YYYY-MM-DD/HH-MM-title.md` files
 - [ ] **User test:** Run for a day with events across multiple accounts, verify file output
+
+### Milestone 2.5: PROMPT.md Config, Email Delivery, Reply Loop
+**Goal:** Personalize via PROMPT.md, deliver briefings by email, respond to reply threads.
+
+- [x] PROMPT.md restructured into parseable sections (Accounts, Delivery, Briefing Format, Research Instructions)
+- [x] `src/prompt.ts` parser with tests
+- [x] Email delivery via Resend (`bun carlton send`)
+- [x] `src/email.ts` isolated from Google services (safety-tested)
+- [x] Reply polling loop (`bun carlton serve`)
+- [ ] **User test:** Send a briefing, reply to it, verify Carlton detects the reply
 
 ### Milestone 3: Cross-Service Research
 **Goal:** For each meeting, pull context from Gmail, Calendar history, and Google Drive.

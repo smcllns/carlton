@@ -5,3 +5,9 @@ credentials/*
 !credentials/example.json
 reports/*
 !reports/.gitkeep
+!reports/memory.txt
+.env
+/carlton
+.carlton-reply.md
+.carlton-processed-ids
+tmp/

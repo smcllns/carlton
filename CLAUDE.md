@@ -15,7 +15,10 @@ Carlton fetches calendar events for a given day (default: tomorrow) across multi
 - `src/google.ts` — Wrappers for gccli, gmcli, gdcli
 - `src/calendar.ts` — Multi-account event fetching + dedup
 - `src/report.ts` — Report generation and file output
+- `src/prompt.ts` — PROMPT.md parser (accounts, delivery, freeform sections)
+- `src/email.ts` — Resend email delivery (⚠️ isolated from Google — see Security below)
 - `src/config.ts` — Config management
+- `PROMPT.md` — User config (accounts, delivery, briefing format, research instructions)
 - `credentials/` — Your OAuth JSON goes here (gitignored)
 
 ## CRITICAL: Read-Only Safety
@@ -31,6 +34,16 @@ This is enforced by:
 3. Code review - never add write methods to any source file
 
 If you need to add functionality, it must be **read-only** (search, list, get, download).
+
+## ⚠️ Security Architecture
+
+Carlton separates Google data access from email delivery:
+
+- **Google services (google.ts)** — read-only access to Gmail, Calendar, Drive via OAuth tokens in `~/.gmcli/`, `~/.gccli/`, `~/.gdcli/`
+- **Email delivery (email.ts)** — sends briefings via Resend using `RESEND_API_KEY` from `.env`
+- **These two must never cross.** `email.ts` MUST NOT import `google.ts` or any `@mariozechner/*` library. Safety tests enforce this.
+- **PROMPT.md is the user's config** — read it, don't modify it
+- **Data flow:** Google (read) → Carlton (process) → Resend (send to user)
 
 ## Memory
 
