@@ -91,7 +91,6 @@ export async function runResearch(
           "-p", researchPrompt,
           "--model", "haiku",
           "--allowedTools", allowedTools,
-          "--output-file", filepath,
         ],
         {
           cwd: projectRoot,
@@ -101,18 +100,18 @@ export async function runResearch(
       );
 
       const timeout = setTimeout(() => proc.kill(), 90_000);
-      const exitCode = await proc.exited;
+      const [exitCode, stdout, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
       clearTimeout(timeout);
 
       if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text();
         return { event, filepath, success: false, error: `exit ${exitCode}: ${stderr.slice(0, 200)}` };
       }
 
-      if (!existsSync(filepath)) {
-        const stdout = await new Response(proc.stdout).text();
-        writeFileSync(filepath, stdout, "utf8");
-      }
+      writeFileSync(filepath, stdout, "utf8");
 
       return { event, filepath, success: true };
     } catch (err: any) {

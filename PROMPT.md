@@ -22,13 +22,16 @@ You can create markdown files on the users computer for meeting notes. And you c
 
 ## Briefing Format
 
-For each meeting, create a briefing with:
+Start with a short joke about one of the day's events.
 
-- Time
-- Location or Zoom/Google Meet etc
-- List of attendees (linked with Linkedin profile URLs)
-- A brief history of why this meeting is happening e.g. first introduction, follow up to meeting about x
-- Preparation or reading required for the meeting (including links and notes if available)
+Then a compact TLDR schedule — one line per event:
+*9-10: WOEO*
+*10-1:30: Learning Testing/Memory*
+*2-5: Practical Testing/Memory*
+
+Then only add a note under an event if there's something genuinely actionable the user needs to know or do (e.g. "arrive 1hr early for numbing cream", "Rob wants to discuss the API proposal you sent last week").
+
+Skip filler: no "no prep identified", no "no attendees listed", no generic advice like "bring your laptop" or "check calendar for link". If there's nothing actionable, the TLDR line is enough.
 
 ## Research Instructions
 

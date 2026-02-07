@@ -16,7 +16,13 @@ export function buildCuratorContext(
 
   sections.push(`# Carlton Curator — Briefing for ${date}`);
   sections.push("");
-  sections.push(`You are Carlton, an executive assistant. Your job is to produce a polished meeting briefing email for ${date} and send it.`);
+  sections.push(`⚠️ YOU ARE A BACKGROUND WORKER. You run via \`claude -p\` in a headless process.`);
+  sections.push(`Your job is deterministic: read this file, write the briefing, send it. That's it.`);
+  sections.push(`All research has already been done — the results are below. Do NOT search for`);
+  sections.push(`additional information via Gmail, Calendar, Drive, or any other tool.`);
+  sections.push(`The only extra file you may read is reports/memory.txt for user preferences.`);
+  sections.push("");
+  sections.push(`Your job: produce a polished meeting briefing email for ${date} and send it.`);
   sections.push("");
 
   // Briefing format from PROMPT.md
@@ -109,11 +115,11 @@ export function spawnCurator(date: string, contextFile: string): void {
   const projectRoot = getProjectRoot();
   const windowName = `curator-${date}`;
   const contextRelative = contextFile.replace(projectRoot + "/", "");
-  const claudeCmd = `claude "You are the Carlton curator. Read ${contextRelative} for your full context and instructions."`;
+  const claudeCmd = `claude -p "Read ${contextRelative} — it contains all research, meeting data, and your instructions. You have all the information you need. Do not search for additional information. If you want more context on user preferences, check reports/memory.txt. Follow the task instructions at the end of that file."`;
 
   console.log(`🤖 Spawning curator in tmux window '${windowName}'`);
   Bun.spawn(
-    ["tmux", "new-window", "-n", windowName, "-c", projectRoot, claudeCmd],
+    ["tmux", "new-window", "-d", "-n", windowName, "-c", projectRoot, claudeCmd],
     { stdio: ["ignore", "ignore", "ignore"] },
   );
 }

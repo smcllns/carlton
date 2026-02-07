@@ -10,6 +10,7 @@
  *   bun carlton serve                   # Poll for replies, spawn Claude in tmux windows (requires tmux)
  *   bun carlton send-briefing 2026-02-10 # Send reports/<date>/briefing.md via email
  *   bun carlton reply-to <subj> <file>  # Send a threaded reply via Resend
+ *   bun carlton reset                   # Wipe reports, memory, processed IDs (keeps auth)
  *   bun carlton setup                   # Check auth status
  *   bun carlton auth                    # Show setup instructions
  *   bun carlton credentials             # Register OAuth credentials
@@ -27,7 +28,7 @@ import { loadPrompt, type PromptConfig } from "./prompt.ts";
 import { sendBriefing, sendReply } from "./email.ts";
 import { getGmail } from "./google.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync } from "fs";
 import {
   nextResponseNumber,
   buildThreadHistory,
@@ -346,7 +347,8 @@ function randomTldr(date: string, events: CalendarEvent[]): string {
 }
 
 function replyContentHash(msg: any): string {
-  const input = [msg.from || "", msg.subject || "", msg.snippet || "", msg.date || ""].join("|");
+  if (msg.id) return msg.id;
+  const input = [msg.from || "", msg.subject || "", msg.date || ""].join("|");
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
 
@@ -420,7 +422,7 @@ async function handleReply(account: string, threadId: string, msg: any) {
   const claudeCmd = `claude "A user replied to a Carlton briefing email. Read ${contextRelative} for the full context and instructions."`;
   console.log(`🤖 Spawning Claude in tmux window '${windowName}'`);
   Bun.spawn(
-    ["tmux", "new-window", "-n", windowName, "-c", projectRoot, claudeCmd],
+    ["tmux", "split-window", "-h", "-c", projectRoot, claudeCmd],
     { stdio: ["ignore", "ignore", "ignore"] }
   );
 }
@@ -451,6 +453,22 @@ async function cmdServe() {
   const persistIds = () => writeFileSync(idsFile, [...processedIds].join("\n"), "utf8");
 
   const POLL_INTERVAL = 30_000;
+
+  // Seed: mark all existing messages as processed so we only react to new ones
+  for (const account of accounts) {
+    try {
+      const results = await gmail.searchThreads(account, "subject:(Carlton Briefing Notes)", 10);
+      for (const thread of results.threads) {
+        for (const msg of thread.messages) {
+          processedIds.add(replyContentHash(msg));
+        }
+      }
+    } catch (err: any) {
+      console.error(`  Error seeding ${account}: ${err.message}`);
+    }
+  }
+  persistIds();
+  console.log(`  Seeded ${processedIds.size} existing messages.\n`);
 
   const poll = async () => {
     const pending: { account: string; threadId: string; msg: any }[] = [];
@@ -530,6 +548,40 @@ async function cmdRun() {
   await cmdServe();
 }
 
+function cmdReset() {
+  const reportsDir = getReportsDir();
+  const idsFile = join(getProjectRoot(), ".carlton-processed-ids");
+
+  const deleted: string[] = [];
+
+  if (existsSync(idsFile)) {
+    rmSync(idsFile);
+    deleted.push(".carlton-processed-ids");
+  }
+
+  if (existsSync(reportsDir)) {
+    const entries = readdirSync(reportsDir).filter((f) => f !== "memory.txt" && f !== ".gitkeep");
+    for (const entry of entries) {
+      rmSync(join(reportsDir, entry), { recursive: true, force: true });
+      deleted.push(`reports/${entry}`);
+    }
+  }
+
+  const memoryFile = join(reportsDir, "memory.txt");
+  if (existsSync(memoryFile)) {
+    rmSync(memoryFile);
+    deleted.push("reports/memory.txt");
+  }
+
+  if (deleted.length === 0) {
+    console.log("Nothing to reset.");
+  } else {
+    console.log("Deleted:");
+    for (const d of deleted) console.log(`  ${d}`);
+    console.log(`\nAuth untouched (~/.gccli, ~/.gmcli, ~/.gdcli).`);
+  }
+}
+
 // --- Main ---
 
 const args = process.argv.slice(2);
@@ -546,7 +598,16 @@ if (!command) {
 } else if (command === "accounts" && args[1] === "add") {
   await cmdAccountsAdd(args[2]);
 } else if (command === "send") {
-  const date = args[1] && isValidDate(args[1]) ? args[1] : getTomorrow();
+  const testMode = args.includes("--test");
+  const dateArg = args.slice(1).find(a => a !== "--test");
+  const date = dateArg && isValidDate(dateArg) ? dateArg : getTomorrow();
+  if (testMode) {
+    const sentMarker = join(getReportsDir(), date, ".briefing-sent");
+    if (existsSync(sentMarker)) {
+      unlinkSync(sentMarker);
+      console.log(`Cleared sent marker for ${date}.`);
+    }
+  }
   await cmdSend(date);
 } else if (command === "send-briefing") {
   const date = args[1] && isValidDate(args[1]) ? args[1] : getTomorrow();
@@ -561,10 +622,12 @@ if (!command) {
     process.exit(1);
   }
   await cmdReplyTo(subject, bodyFile);
+} else if (command === "reset") {
+  cmdReset();
 } else if (isValidDate(command)) {
   await cmdPrep(command);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|reply-to <subject> <file>]");
+  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|reply-to <subject> <file>|reset]");
   process.exit(1);
 }

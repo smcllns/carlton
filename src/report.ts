@@ -31,38 +31,19 @@ export function writeReport(filepath: string, content: string): void {
   fs.writeFileSync(filepath, content, "utf8");
 }
 
-/** Format an event into a basic report */
+/** Format an event into a basic report (one compact line + optional details) */
 export function formatBasicReport(event: CalendarEvent): string {
   const lines: string[] = [];
+  const time = `${formatTime(event.start)} – ${formatTime(event.end)}`;
+  lines.push(`🍩 *${time}: ${event.summary}*`);
 
-  lines.push(`# ☘️🦊 ${event.summary}`);
-  lines.push("");
-  lines.push(`**Time:** ${formatTime(event.start)} - ${formatTime(event.end)}`);
-
-  if (event.location) {
-    lines.push(`**Location:** ${event.location}`);
-  }
-
-  if (event.htmlLink) {
-    lines.push(`**Calendar link:** ${event.htmlLink}`);
-  }
-
-  lines.push("");
-
-  if (event.attendees.length > 0) {
-    lines.push("## ☘️ Attendees");
-    lines.push("");
-    for (const attendee of event.attendees) {
-      lines.push(`- ${attendee}`);
-    }
-    lines.push("");
-  }
+  const details: string[] = [];
+  if (event.location) details.push(event.location);
+  if (event.attendees.length > 0) details.push(event.attendees.join(", "));
+  if (details.length > 0) lines.push(details.join(" · "));
 
   if (event.description) {
-    lines.push("## 🦊 Description");
-    lines.push("");
     lines.push(event.description);
-    lines.push("");
   }
 
   return lines.join("\n");

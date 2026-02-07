@@ -21,25 +21,17 @@ const sampleEvent: CalendarEvent = {
 };
 
 describe("formatBasicReport", () => {
-  test("includes event title", () => {
+  test("includes event title and time on one line", () => {
     const report = formatBasicReport(sampleEvent);
-    expect(report).toContain("# ☘️🦊 Weekly Standup");
+    expect(report).toContain("Weekly Standup");
+    expect(report).toContain("🍩");
   });
 
-  test("includes time", () => {
+  test("includes location and attendees on detail line", () => {
     const report = formatBasicReport(sampleEvent);
-    expect(report).toContain("**Time:**");
-  });
-
-  test("includes location", () => {
-    const report = formatBasicReport(sampleEvent);
-    expect(report).toContain("**Location:** Zoom");
-  });
-
-  test("lists attendees", () => {
-    const report = formatBasicReport(sampleEvent);
-    expect(report).toContain("- alice@example.com");
-    expect(report).toContain("- bob@example.com");
+    expect(report).toContain("Zoom");
+    expect(report).toContain("alice@example.com");
+    expect(report).toContain("bob@example.com");
   });
 
   test("includes description", () => {
@@ -58,9 +50,9 @@ describe("formatBasicReport", () => {
       attendees: [],
     };
     const report = formatBasicReport(minimal);
-    expect(report).toContain("# ☘️🦊 Quick Chat");
-    expect(report).not.toContain("Location");
-    expect(report).not.toContain("Attendees");
+    expect(report).toContain("Quick Chat");
+    const lines = report.split("\n");
+    expect(lines.length).toBe(1);
   });
 
   test("handles all-day event", () => {
