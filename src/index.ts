@@ -7,7 +7,7 @@
  *   bun carlton 2026-02-10              # Prep for a specific date
  *   bun carlton send                    # Email tomorrow's briefing via Resend
  *   bun carlton send 2026-02-10         # Email briefing for specific date
- *   bun carlton serve                   # Poll for email replies, spawn Claude
+ *   bun carlton serve                   # Poll for replies, spawn Claude in tmux windows (requires tmux)
  *   bun carlton reply-to <subj> <file>  # Send a threaded reply via Resend
  *   bun carlton setup                   # Check auth status
  *   bun carlton auth                    # Show setup instructions
@@ -27,6 +27,13 @@ import { sendBriefing, sendReply } from "./email.ts";
 import { getGmail } from "./google.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import {
+  nextResponseNumber,
+  buildThreadHistory,
+  buildReplyContext,
+  writeReplyFile,
+  replyFilePaths,
+} from "./reply.ts";
 import { resolve, join } from "path";
 import { $ } from "bun";
 
@@ -73,6 +80,12 @@ async function cmdSetup() {
 
 function cmdAuth() {
   console.log(`Carlton - Setup Instructions
+
+Prerequisites:
+  - tmux (brew install tmux)
+  - bun (brew install oven-sh/bun/bun)
+  - claude (npm install -g @anthropic-ai/claude-code)
+  - gh (brew install gh, then: gh auth login)
 
 Carlton uses three CLI tools to access your Google data (read-only):
   - gccli (Google Calendar)
@@ -316,12 +329,6 @@ function parseDateFromSubject(subject: string): string | null {
   return match ? match[1] : null;
 }
 
-function nextResponseNumber(responsesDir: string): number {
-  if (!existsSync(responsesDir)) return 1;
-  const files = readdirSync(responsesDir).filter((f) => f.match(/^\d+-reply\.md$/));
-  return files.length + 1;
-}
-
 async function handleReply(account: string, threadId: string, msg: any) {
   const gmail = getGmail();
   const projectRoot = getProjectRoot();
@@ -342,103 +349,35 @@ async function handleReply(account: string, threadId: string, msg: any) {
   mkdirSync(responsesDir, { recursive: true });
 
   const num = nextResponseNumber(responsesDir);
-  const replyFile = join(responsesDir, `${String(num).padStart(2, "0")}-reply.md`);
-  const responseFile = join(responsesDir, `${String(num).padStart(2, "0")}-response.md`);
+  const paths = replyFilePaths(responsesDir, num);
+  const msgDate = msg.date || new Date().toISOString();
 
-  writeFileSync(replyFile, `# User Reply #${num}
+  writeReplyFile(paths.replyFile, num, msg.from, msgDate, msg.subject, replyBody);
 
-**From:** ${msg.from}
-**Date:** ${msg.date || new Date().toISOString()}
-**Subject:** ${msg.subject}
+  const threadHistory = buildThreadHistory(responsesDir, num);
+  const context = buildReplyContext(
+    { from: msg.from, subject: msg.subject, date: msgDate, account, threadId, messageId: msg.id, briefingDate: date },
+    replyBody,
+    threadHistory,
+    paths,
+  );
+  writeFileSync(paths.contextFile, context, "utf8");
 
-${replyBody}
-`, "utf8");
-
-  let threadHistory = "";
-  if (existsSync(responsesDir)) {
-    const currentPrefix = String(num).padStart(2, "0");
-    const files = readdirSync(responsesDir)
-      .filter((f) => f.match(/^\d+-(reply|response)\.md$/) && !f.startsWith(currentPrefix))
-      .sort();
-    const exchanges: { reply: string; response: string }[] = [];
-    for (const f of files) {
-      const content = readFileSync(join(responsesDir, f), "utf8");
-      const match = f.match(/^(\d+)-(reply|response)\.md$/);
-      if (!match) continue;
-      const idx = parseInt(match[1], 10) - 1;
-      if (!exchanges[idx]) exchanges[idx] = { reply: "", response: "" };
-      exchanges[idx][match[2] as "reply" | "response"] = content;
-    }
-    const parts: string[] = [];
-    for (let i = 0; i < exchanges.length; i++) {
-      const ex = exchanges[i];
-      if (!ex) continue;
-      parts.push(`### Exchange #${i + 1}\n**User:** ${ex.reply}\n**Carlton:** ${ex.response}`);
-    }
-    if (parts.length > 0) {
-      threadHistory = `## Previous Exchanges\n\n${parts.join("\n\n")}\n\n`;
-    }
-  }
-
-  const contextFile = join(projectRoot, ".carlton-reply.md");
-  const context = `# User Reply to Carlton Briefing
-
-**From:** ${msg.from}
-**Subject:** ${msg.subject}
-**Date:** ${msg.date || new Date().toISOString()}
-**Account:** ${account}
-**Thread ID:** ${threadId}
-**Message ID:** ${msg.id}
-**Briefing Date:** ${date}
-
-## Reply Content
-
-${replyBody}
-
-${threadHistory}## Data Files
-
-- User's reply saved to: ${replyFile}
-- Write your response to: ${responseFile}
-- Meeting reports in: reports/${date}/
-
-## Instructions
-
-The user replied to a Carlton meeting briefing email. Your job:
-
-1. Read the user's reply above and understand what they're asking for
-2. Check the report files in reports/${date}/ for context on the meetings
-3. Use the CLI tools to research what the user asked about:
-   - \`bunx gmcli\` for Gmail search (read-only)
-   - \`bunx gccli\` for Calendar (read-only)
-   - \`bunx gdcli\` for Google Drive (read-only)
-   - All tools support \`--help\` for usage
-4. Update the relevant report file with your findings
-5. Write your response to ${responseFile}, then send it: \`bun carlton reply-to "${msg.subject}" ${responseFile}\`
-6. Update reports/memory.txt with any USER PREFERENCES about briefing format, style, or content.
-   - Record preferences like "always start with a TLDR", "include links to sources", "use tables for timelines"
-   - Use category \`preference:\` for these entries
-   - Do NOT log process observations like "reply loop working" — only log things that should change future briefing output
-`;
-
-  writeFileSync(contextFile, context, "utf8");
-
-  console.log(`🤖 Spawning Claude to handle reply...`);
-  try {
-    const proc = Bun.spawn(
-      ["claude", "-p", "A user replied to a Carlton briefing email. Read .carlton-reply.md for the full context and instructions."],
-      {
-        cwd: projectRoot,
-        stdio: ["inherit", "inherit", "inherit"],
-      }
-    );
-    await proc.exited;
-    console.log(`✅ Claude finished handling reply`);
-  } catch (err: any) {
-    console.error(`❌ Claude failed: ${err.message}`);
-  }
+  const windowName = `reply-${String(num).padStart(2, "0")}`;
+  const contextRelative = `reports/${date}/responses/${String(num).padStart(2, "0")}-context.md`;
+  const claudeCmd = `claude "A user replied to a Carlton briefing email. Read ${contextRelative} for the full context and instructions."`;
+  console.log(`🤖 Spawning Claude in tmux window '${windowName}'`);
+  Bun.spawn(
+    ["tmux", "new-window", "-n", windowName, "-c", projectRoot, claudeCmd],
+    { stdio: ["ignore", "ignore", "ignore"] }
+  );
 }
 
 async function cmdServe() {
+  if (!process.env.TMUX) {
+    throw new Error("serve must run inside tmux. Start a tmux session first: tmux new -s carlton");
+  }
+
   const prompt = loadPrompt();
   const gmail = getGmail();
   const accounts = gmail.listAccounts().map((a: any) => a.email);
@@ -460,11 +399,8 @@ async function cmdServe() {
   const persistIds = () => writeFileSync(idsFile, [...processedIds].join("\n"), "utf8");
 
   const POLL_INTERVAL = 30_000;
-  let busy = false;
 
   const poll = async () => {
-    if (busy) return;
-
     const pending: { account: string; threadId: string; msg: any }[] = [];
 
     for (const account of accounts) {
@@ -502,9 +438,7 @@ async function cmdServe() {
       console.log(`   "${(msg.snippet || "").slice(0, 100)}"`);
       persistIds();
 
-      busy = true;
       await handleReply(account, threadId, msg);
-      busy = false;
     }
   };
 

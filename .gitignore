@@ -8,6 +8,6 @@ reports/*
 !reports/memory.txt
 .env
 /carlton
-.carlton-reply.md
+.carlton-reply*.md
 .carlton-processed-ids
 .llm/
