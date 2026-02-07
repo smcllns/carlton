@@ -354,6 +354,32 @@ async function handleReply(account: string, threadId: string, msg: any) {
 ${replyBody}
 `, "utf8");
 
+  let threadHistory = "";
+  if (existsSync(responsesDir)) {
+    const currentPrefix = String(num).padStart(2, "0");
+    const files = readdirSync(responsesDir)
+      .filter((f) => f.match(/^\d+-(reply|response)\.md$/) && !f.startsWith(currentPrefix))
+      .sort();
+    const exchanges: { reply: string; response: string }[] = [];
+    for (const f of files) {
+      const content = readFileSync(join(responsesDir, f), "utf8");
+      const match = f.match(/^(\d+)-(reply|response)\.md$/);
+      if (!match) continue;
+      const idx = parseInt(match[1], 10) - 1;
+      if (!exchanges[idx]) exchanges[idx] = { reply: "", response: "" };
+      exchanges[idx][match[2] as "reply" | "response"] = content;
+    }
+    const parts: string[] = [];
+    for (let i = 0; i < exchanges.length; i++) {
+      const ex = exchanges[i];
+      if (!ex) continue;
+      parts.push(`### Exchange #${i + 1}\n**User:** ${ex.reply}\n**Carlton:** ${ex.response}`);
+    }
+    if (parts.length > 0) {
+      threadHistory = `## Previous Exchanges\n\n${parts.join("\n\n")}\n\n`;
+    }
+  }
+
   const contextFile = join(projectRoot, ".carlton-reply.md");
   const context = `# User Reply to Carlton Briefing
 
@@ -369,7 +395,7 @@ ${replyBody}
 
 ${replyBody}
 
-## Data Files
+${threadHistory}## Data Files
 
 - User's reply saved to: ${replyFile}
 - Write your response to: ${responseFile}
@@ -388,7 +414,10 @@ The user replied to a Carlton meeting briefing email. Your job:
    - All tools support \`--help\` for usage
 4. Update the relevant report file with your findings
 5. Write your response to ${responseFile}, then send it: \`bun carlton reply-to "${msg.subject}" ${responseFile}\`
-6. Log what you learned to reports/memory.txt
+6. Update reports/memory.txt with any USER PREFERENCES about briefing format, style, or content.
+   - Record preferences like "always start with a TLDR", "include links to sources", "use tables for timelines"
+   - Use category \`preference:\` for these entries
+   - Do NOT log process observations like "reply loop working" — only log things that should change future briefing output
 `;
 
   writeFileSync(contextFile, context, "utf8");
@@ -396,7 +425,7 @@ The user replied to a Carlton meeting briefing email. Your job:
   console.log(`🤖 Spawning Claude to handle reply...`);
   try {
     const proc = Bun.spawn(
-      ["claude", "A user replied to a Carlton briefing email. Read .carlton-reply.md for the full context and instructions."],
+      ["claude", "-p", "A user replied to a Carlton briefing email. Read .carlton-reply.md for the full context and instructions."],
       {
         cwd: projectRoot,
         stdio: ["inherit", "inherit", "inherit"],
@@ -436,6 +465,8 @@ async function cmdServe() {
   const poll = async () => {
     if (busy) return;
 
+    const pending: { account: string; threadId: string; msg: any }[] = [];
+
     for (const account of accounts) {
       try {
         const results = await gmail.searchThreads(
@@ -452,18 +483,28 @@ async function cmdServe() {
             const isFromUser = !msg.from?.includes("resend.dev");
             if (!isFromUser) continue;
 
-            console.log(`📩 Reply from ${msg.from}: ${msg.subject}`);
-            console.log(`   "${(msg.snippet || "").slice(0, 100)}"`);
-            persistIds();
-
-            busy = true;
-            await handleReply(account, thread.id, msg);
-            busy = false;
+            pending.push({ account, threadId: thread.id, msg });
           }
         }
       } catch (err: any) {
         console.error(`  Error polling ${account}: ${err.message}`);
       }
+    }
+
+    pending.sort((a, b) => {
+      const dateA = new Date(a.msg.date || a.msg.internalDate || 0).getTime();
+      const dateB = new Date(b.msg.date || b.msg.internalDate || 0).getTime();
+      return dateA - dateB;
+    });
+
+    for (const { account, threadId, msg } of pending) {
+      console.log(`📩 Reply from ${msg.from}: ${msg.subject}`);
+      console.log(`   "${(msg.snippet || "").slice(0, 100)}"`);
+      persistIds();
+
+      busy = true;
+      await handleReply(account, threadId, msg);
+      busy = false;
     }
   };
 

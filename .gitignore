@@ -10,4 +10,4 @@ reports/*
 /carlton
 .carlton-reply.md
 .carlton-processed-ids
-tmp/
+.llm/

@@ -132,7 +132,7 @@ carlton/
 - [x] Create `reports/YYYY-MM-DD/HH-MM-title.md` files
 - [ ] **User test:** Run for a day with events across multiple accounts, verify file output
 
-### Milestone 2.5: PROMPT.md Config, Email Delivery, Reply Loop
+### Milestone 2.5: Email Reply Loop
 **Goal:** Personalize via PROMPT.md, deliver briefings by email, respond to reply threads.
 
 - [x] PROMPT.md restructured into parseable sections (Accounts, Delivery, Briefing Format, Research Instructions)
@@ -151,8 +151,8 @@ carlton/
 - [ ] Add research results to report files
 - [ ] **User test:** Review reports, confirm useful context is being pulled
 
-### Milestone 4: Great Meeting Prep Docs
-**Goal:** Learn what the user actually wants in prep docs. Iterate on format, content, emphasis.
+### Milestone 4: Building Great Meeting Prep Docs
+**Goal:** Learn what the user actually wants in prep docs. Iterate on format, content, emphasis. Systematically log all preferences,  learnings, and user corrections. Then periodically sumamrize those to build a playbook that works well all the time.
 
 - [ ] Work through example reports one by one with user
 - [ ] Record every preference to memory.txt
