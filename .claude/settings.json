@@ -5,18 +5,55 @@
       "Write(reports/**)",
       "Edit(reports/**)",
       "Read(.carlton-reply.md)",
-      "Bash(bun carlton reply-to:*)",
-      "Bash(bun carlton send:*)",
-      "Bash(bunx gmcli:*)",
-      "Bash(bunx gccli:*)",
-      "Bash(bunx gdcli:*)",
-      "Bash(mkdir -p:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
       "Read(PROMPT.md)",
       "Read(src/**)",
       "Write(src/*.self.md)",
-      "Bash(bun carlton send-briefing:*)"
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git fetch:*)",
+      "Bash(git remote:*)",
+      "Bash(git rm:*)",
+      "Bash(git reset HEAD:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git -C:*)",
+      "Bash(bun carlton:*)",
+      "Bash(bun test:*)",
+      "Bash(bun install:*)",
+      "Bash(bun add:*)",
+      "Bash(bun run:*)",
+      "Bash(bunx gmcli:*)",
+      "Bash(bunx gccli:*)",
+      "Bash(bunx gdcli:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(tmux new-session:*)",
+      "Bash(tmux new-window:*)",
+      "Bash(tmux send-keys:*)",
+      "Bash(tmux capture-pane:*)",
+      "Bash(tmux list-windows:*)",
+      "Bash(tmux has-session:*)",
+      "Bash(tmux kill-session:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(wc:*)",
+      "Bash(test:*)",
+      "Bash(TMUX=\"\" bun run:*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/stop-memory-prompt.sh"
+          }
+        ]
+      }
     ]
   }
 }

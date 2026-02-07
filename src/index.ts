@@ -282,11 +282,19 @@ async function cmdSend(date: string) {
 
   console.log(`Found ${events.length} meeting(s).\n`);
 
+  const sentMarker = join(getReportsDir(), date, ".briefing-sent");
+  if (existsSync(sentMarker)) {
+    console.log(`Briefing for ${date} was already sent. Skipping.`);
+    return;
+  }
+
   if (!process.env.TMUX) {
     console.log("Not in tmux — sending basic briefing (no research/curator).\n");
-    const combined = reports.map((r) => r.content).join("\n\n---\n\n");
-    const subject = `Carlton: ${date} Meeting Briefing (${events.length} meetings)`;
+    const tldr = `> *${randomTldr(date, events)}*\n\n`;
+    const combined = tldr + reports.map((r) => r.content).join("\n\n---\n\n");
+    const subject = `${date} Carlton Briefing Notes`;
     const messageId = await sendBriefing(prompt.delivery.email, subject, combined);
+    writeFileSync(sentMarker, messageId, "utf8");
     console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
     console.log(`   Message ID: ${messageId}`);
     return;
@@ -310,16 +318,31 @@ async function cmdSend(date: string) {
 async function cmdSendBriefing(date: string) {
   const prompt = loadPrompt();
   const briefingFile = join(getReportsDir(), date, "briefing.md");
+  const sentMarker = join(getReportsDir(), date, ".briefing-sent");
+
+  if (existsSync(sentMarker)) {
+    console.log(`Briefing for ${date} was already sent. Skipping.`);
+    return;
+  }
 
   if (!existsSync(briefingFile)) {
     throw new Error(`No briefing found at ${briefingFile}. Run 'bun carlton send ${date}' first.`);
   }
 
   const markdown = readFileSync(briefingFile, "utf8");
-  const subject = `Carlton: ${date} Meeting Briefing`;
+  const subject = `${date} Carlton Briefing Notes`;
   const messageId = await sendBriefing(prompt.delivery.email, subject, markdown);
+  writeFileSync(sentMarker, messageId, "utf8");
   console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
   console.log(`   Message ID: ${messageId}`);
+}
+
+function randomTldr(date: string, events: CalendarEvent[]): string {
+  const hex = createHash("sha256").update(`${date}-${Date.now()}`).digest("hex").slice(0, 6);
+  const count = events.length;
+  const times = events.map((e) => formatTimeShort(e.start)).filter(Boolean);
+  const range = times.length >= 2 ? `${times[0]}–${times[times.length - 1]}` : times[0] || "all day";
+  return `${count} meeting${count !== 1 ? "s" : ""} on deck for ${date}, ${range} — ref:${hex}`;
 }
 
 function replyContentHash(msg: any): string {
@@ -436,7 +459,7 @@ async function cmdServe() {
       try {
         const results = await gmail.searchThreads(
           account,
-          "subject:(Carlton Meeting Briefing)",
+          "subject:(Carlton Briefing Notes)",
           10
         );
 

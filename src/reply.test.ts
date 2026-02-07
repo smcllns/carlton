@@ -133,7 +133,7 @@ describe("buildThreadHistory", () => {
 describe("buildReplyContext", () => {
   const meta = {
     from: "sam@test.com",
-    subject: "Re: Carlton: 2026-02-09 Meeting Briefing",
+    subject: "Re: 2026-02-09 Carlton Briefing Notes",
     date: "2026-02-09T10:00:00",
     account: "sam@test.com",
     threadId: "thread123",
@@ -166,7 +166,7 @@ describe("buildReplyContext", () => {
 
   test("includes reply-to command with correct subject", () => {
     const ctx = buildReplyContext(meta, "test", "", files);
-    expect(ctx).toContain('bun carlton reply-to "Re: Carlton: 2026-02-09 Meeting Briefing"');
+    expect(ctx).toContain('bun carlton reply-to "Re: 2026-02-09 Carlton Briefing Notes"');
   });
 
   test("memory instructions specify preference category only", () => {
