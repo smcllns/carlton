@@ -1,0 +1,7 @@
+node_modules/
+dist/
+credentials/*
+!credentials/.gitkeep
+!credentials/example.json
+reports/*
+!reports/.gitkeep
