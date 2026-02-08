@@ -1,6 +1,6 @@
 # Carlton
 
-An agent who manages subagents working across your calendar, docs and inbox, communicating by email. 
+An agent who manages subagents working across your calendar, docs and inbox, communicating with you by email. 
 
 Carlton fetches your calendar across multiple Google accounts, manages multiple parallel Claude agents to research different areas (across Gmail, Calendar, Drive), compiles and emails briefing notes to you. 
 
