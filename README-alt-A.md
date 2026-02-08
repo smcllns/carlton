@@ -44,44 +44,71 @@ tmux new -s carlton 'bun carlton'    # send + poll for replies
 
 Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
 
-## How it works
+### How `send` works
 
-`send` fetches events across all configured accounts, spawns parallel Claude agents (haiku) to research each meeting, then hands everything to a curator agent that writes and emails the briefing.
+1. Fetches calendar events for the target date across all configured accounts
+2. Spawns parallel Claude agents (haiku) to research each meeting via Gmail, Calendar, and Drive
+3. Hands all research to a curator agent that compiles a polished briefing
+4. Curator sends the briefing email via Resend
 
-`serve` polls Gmail for replies to the briefing. When you reply, it spawns a Claude session in a tmux window to research your question and send a threaded response back. Thread history carries across replies so context accumulates.
+No tmux required. Runs headlessly.
 
-## Status
+### How `serve` works
 
-This works end-to-end: multi-account calendar, parallel research, curator pipeline, email delivery, reply loop with thread history, and an E2E test that covers the full cycle.
+Polls Gmail for replies to briefing emails. When a reply is detected, spawns an interactive Claude agent in a tmux window to research and respond. Requires tmux.
 
-Still needs work: reply agents require tmux for interactive permission approval — once the permission set stabilizes, this can go fully headless.
+```bash
+tmux new -s carlton
+bun carlton serve
+```
 
-## Security
+### E2E test
 
-Google access is strictly read-only — search, list, get. No sends, creates, updates, or deletes. This is enforced by [safety tests](test/safety.test.ts) that scan all source files for forbidden method calls.
+```bash
+tmux new -s carlton-test 'bun test/e2e.ts'
+```
 
-Email delivery uses Resend, which is completely separate from Google auth. `email.ts` cannot import `google.ts` or access Google credentials (also enforced by safety tests).
+## Security Model
 
-Data flow: Google (read) → Carlton (process) → Resend (send to user)
+Carlton separates **reading user data** from **sending output**:
 
-## Reference
+- **Google services (Gmail, Calendar, Drive) are read-only** — enforced by code and safety tests. Carlton can search, list, and get. It cannot send, create, update, or delete.
+- **Email delivery uses Resend**, a separate transactional email API. Carlton sends briefings *to* the user — it cannot send *as* the user.
+- **`src/email.ts` is isolated from Google** — it cannot import `google.ts` or access Google credentials. Safety tests enforce this.
+- **Data flow:** Google (read) → Carlton (process) → Resend (send to user)
 
-Command reference — most of these are used by Carlton's own agents, not by you directly.
+## Auth Strategy
 
-| Command | What it does |
-|---------|-------------|
-| `bun carlton` | `send` + `serve` (requires tmux) |
-| `bun carlton <date>` | Prep for a date, local only |
-| `bun carlton send [date]` | Research + curate + email |
-| `bun carlton send-briefing <date>` | Email an already-written briefing |
-| `bun carlton serve` | Poll for reply emails (requires tmux) |
-| `bun carlton reply-to <subj> <file>` | Send a threaded reply |
-| `bun carlton reset` | Wipe reports, memory, processed IDs |
-| `bun carlton setup` | Check auth status |
-| `bun carlton auth` | Show setup instructions |
-| `bun carlton credentials` | Register OAuth credentials |
-| `bun carlton accounts add <email>` | Add a Google account |
-| `bun test` | Run tests |
+- One Google Cloud project with Gmail API, Calendar API, and Drive API enabled
+- One OAuth Desktop App client → download credentials JSON
+- `bun carlton credentials` registers the same credentials file with all three tools
+- `bun carlton accounts add you@gmail.com` adds an account to all three tools in one command
+- Tokens stored separately in `~/.gmcli/`, `~/.gccli/`, `~/.gdcli/`
+
+## Folder Structure
+
+```
+carlton/
+├── credentials/          # OAuth credentials (gitignored)
+├── src/
+│   ├── index.ts          # CLI entry point and all commands
+│   ├── config.ts         # Path helpers
+│   ├── google.ts         # Service wrappers (gmail, calendar, drive)
+│   ├── calendar.ts       # Multi-account event fetching + dedup
+│   ├── report.ts         # Report generation + file output
+│   ├── research.ts       # Parallel per-meeting research via Claude agents
+│   ├── curator.ts        # Curator agent context builder + runner
+│   ├── reply.ts          # Reply thread handling
+│   ├── prompt.ts         # PROMPT.md parser
+│   └── email.ts          # Resend email delivery (isolated from Google)
+├── test/                 # Unit + E2E tests
+├── docs/                 # Architecture notes, RFCs, agent handoff docs
+├── reports/              # All output (gitignored)
+├── PROMPT.md             # User config (accounts, delivery, format)
+├── .env                  # RESEND_API_KEY (gitignored)
+├── CLAUDE.md             # Agent instructions
+└── README.md
+```
 
 ## Docs
 
