@@ -9,21 +9,31 @@ function getResend(): Resend {
 
 const FROM = "Carlton <onboarding@resend.dev>";
 
+export interface BriefingSentResult {
+  resendId: string;
+  messageId: string;
+}
+
 export async function sendBriefing(
   to: string,
   subject: string,
-  markdown: string
-): Promise<string> {
+  markdown: string,
+  date: string
+): Promise<BriefingSentResult> {
   const html = await marked(markdown);
   const resend = getResend();
+  const messageId = `<carlton-${date}@carlton.local>`;
   const { data, error } = await resend.emails.send({
     from: FROM,
     to,
     subject,
     html,
+    headers: {
+      "Message-ID": messageId,
+    },
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  return data!.id;
+  return { resendId: data!.id, messageId };
 }
 
 export async function sendReply(

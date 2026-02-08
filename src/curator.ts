@@ -119,7 +119,7 @@ export async function runCurator(date: string, contextFile: string): Promise<num
 
   console.log(`🤖 Running curator...`);
   const proc = Bun.spawn(
-    ["claude", "-p", "--model", "haiku", "--allowedTools", allowedTools],
+    ["claude", "-p", "--model", "sonnet", "--allowedTools", allowedTools],
     { cwd: projectRoot, stdio: ["pipe", "ignore", "ignore"] },
   );
   proc.stdin.write(prompt);

@@ -1,126 +1,170 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
+import { getReportsDir } from "./config.ts";
 
+/**
+ * Get the highest reply number in a directory.
+ * Returns 0 if no reply files exist.
+ */
+export function maxReplyNumber(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  const files = readdirSync(dir).filter((f) => f.match(/^\d+-reply\.md$/));
+  if (files.length === 0) return 0;
+  return Math.max(...files.map((f) => parseInt(f.match(/^(\d+)/)?.[1] || "0", 10)));
+}
+
+/**
+ * Get the highest response number in a directory.
+ * Returns 0 if no response files exist.
+ */
+export function maxResponseNumber(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  const files = readdirSync(dir).filter((f) => f.match(/^\d+-response\.md$/));
+  if (files.length === 0) return 0;
+  return Math.max(...files.map((f) => parseInt(f.match(/^(\d+)/)?.[1] || "0", 10)));
+}
+
+/**
+ * Check if there are unprocessed replies (replies without responses).
+ */
+export function hasUnprocessedReplies(dir: string): boolean {
+  if (!existsSync(dir)) return false;
+  const maxReply = maxReplyNumber(dir);
+  const maxResponse = maxResponseNumber(dir);
+  return maxReply > maxResponse;
+}
+
+/**
+ * Next response number based on existing reply files.
+ * Returns 1 if no replies exist.
+ */
 export function nextResponseNumber(responsesDir: string): number {
   if (!existsSync(responsesDir)) return 1;
   const files = readdirSync(responsesDir).filter((f) => f.match(/^\d+-reply\.md$/));
   return files.length + 1;
 }
 
-export function buildThreadHistory(responsesDir: string, currentNum: number): string {
-  if (!existsSync(responsesDir)) return "";
-
-  const currentPrefix = String(currentNum).padStart(2, "0");
-  const files = readdirSync(responsesDir)
-    .filter((f) => f.match(/^\d+-(reply|response)\.md$/) && !f.startsWith(currentPrefix))
-    .sort();
-
-  const exchanges: { reply: string; response: string }[] = [];
-  for (const f of files) {
-    const content = readFileSync(join(responsesDir, f), "utf8");
-    const match = f.match(/^(\d+)-(reply|response)\.md$/);
-    if (!match) continue;
-    const idx = parseInt(match[1], 10) - 1;
-    if (!exchanges[idx]) exchanges[idx] = { reply: "", response: "" };
-    exchanges[idx][match[2] as "reply" | "response"] = content;
-  }
-
-  const parts: string[] = [];
-  for (let i = 0; i < exchanges.length; i++) {
-    const ex = exchanges[i];
-    if (!ex) continue;
-    parts.push(`### Exchange #${i + 1}\n**User:** ${ex.reply}\n**Carlton:** ${ex.response}`);
-  }
-
-  if (parts.length === 0) return "";
-  return `## Previous Exchanges\n\n${parts.join("\n\n")}\n\n`;
-}
-
-export interface ReplyMetadata {
-  from: string;
-  subject: string;
-  date: string;
-  account: string;
-  threadId: string;
-  messageId: string;
-  briefingDate: string;
-}
-
-export interface ReplyFiles {
-  replyFile: string;
-  responseFile: string;
-  contextFile: string;
-}
-
-export function buildReplyContext(
-  meta: ReplyMetadata,
-  replyBody: string,
-  threadHistory: string,
-  files: ReplyFiles,
-): string {
-  return `# User Reply to Carlton Briefing
-
-**From:** ${meta.from}
-**Subject:** ${meta.subject}
-**Date:** ${meta.date}
-**Account:** ${meta.account}
-**Thread ID:** ${meta.threadId}
-**Message ID:** ${meta.messageId}
-**Briefing Date:** ${meta.briefingDate}
-
-## Reply Content
-
-${replyBody}
-
-${threadHistory}## Data Files
-
-- User's reply saved to: ${files.replyFile}
-- Write your response to: ${files.responseFile}
-- Meeting reports in: reports/${meta.briefingDate}/
-
-## Instructions
-
-The user replied to a Carlton meeting briefing email. Your job:
-
-1. Read the user's reply above and understand what they're asking for
-2. Check the report files in reports/${meta.briefingDate}/ for context on the meetings
-3. Use the CLI tools to research what the user asked about:
-   - \`bunx gmcli\` for Gmail search (read-only)
-   - \`bunx gccli\` for Calendar (read-only)
-   - \`bunx gdcli\` for Google Drive (read-only)
-   - All tools support \`--help\` for usage
-4. Write your response to ${files.responseFile}, then send it: \`bun carlton reply-to "${meta.subject}" ${files.responseFile}\`
-5. Update reports/memory.txt with any USER PREFERENCES about briefing format, style, or content.
-   - Use format: \`[YYYY-MM-DD] preference: one-line learning\`
-   - Do NOT log process observations — only things that should change future briefing output
-
-## Boundaries
-
-- **DO** update \`reports/memory.txt\` with user preferences
-- **DO** read \`PROMPT.md\` for context on the current briefing format
-- **DO NOT** edit \`PROMPT.md\` directly. If you want to propose changes, write a copy to \`PROMPT.reply-${files.responseFile.match(/(\d+)-response/)?.[1] ?? "00"}.proposed.md\` with your modifications. The user will review and apply async.
-- **DO NOT** edit source code (\`src/*.ts\`). If you want to propose code changes, write to \`src/<filename>.self.md\`.
-- **DO NOT** explore the codebase beyond what's needed to answer the user's question.
-- Stay focused: read the reply, research if needed, respond, log preferences, done.
-`;
-}
-
-export function writeReplyFile(replyFile: string, num: number, from: string, date: string, subject: string, body: string): void {
-  writeFileSync(replyFile, `# User Reply #${num}
+/**
+ * Write a reply file with metadata and body.
+ */
+export function writeReplyFile(
+  replyFile: string,
+  num: number,
+  from: string,
+  date: string,
+  subject: string,
+  body: string
+): void {
+  writeFileSync(
+    replyFile,
+    `# User Reply #${num}
 
 **From:** ${from}
 **Date:** ${date}
 **Subject:** ${subject}
 
 ${body}
-`, "utf8");
+`,
+    "utf8"
+  );
 }
 
-export function replyFilePaths(responsesDir: string, num: number): { replyFile: string; responseFile: string; contextFile: string } {
+/**
+ * Get file paths for a reply/response exchange.
+ */
+export function replyFilePaths(
+  responsesDir: string,
+  num: number
+): { replyFile: string; responseFile: string; contextFile: string } {
   const prefix = String(num).padStart(2, "0");
   return {
     replyFile: join(responsesDir, `${prefix}-reply.md`),
     responseFile: join(responsesDir, `${prefix}-response.md`),
     contextFile: join(responsesDir, `${prefix}-context.md`),
   };
+}
+
+/**
+ * Append a section to thread.md.
+ */
+export function appendToThread(threadFile: string, sectionHeader: string, content: string): void {
+  const section = `
+## ${sectionHeader}
+
+${content}
+
+---
+`;
+  if (existsSync(threadFile)) {
+    appendFileSync(threadFile, section, "utf8");
+  } else {
+    writeFileSync(threadFile, section, "utf8");
+  }
+}
+
+/**
+ * Remove NEW markers from thread.md (e.g., "## NEW Reply #1" -> "## Reply #1").
+ */
+export function removeNewMarkers(threadFile: string): void {
+  if (!existsSync(threadFile)) return;
+  let content = readFileSync(threadFile, "utf8");
+  content = content.replace(/## NEW Reply/g, "## Reply");
+  writeFileSync(threadFile, content, "utf8");
+}
+
+/**
+ * Build the prompt for the reply Claude agent.
+ * Reads thread.md and inlines it into the prompt template.
+ */
+export function buildReplyPrompt(date: string): string {
+  const reportsDir = getReportsDir();
+  const dateDir = join(reportsDir, date);
+  const threadFile = join(dateDir, "thread.md");
+  const researchDir = join(dateDir, "research");
+
+  if (!existsSync(threadFile)) {
+    throw new Error(`thread.md not found for ${date}. Was the briefing sent?`);
+  }
+
+  const threadContent = readFileSync(threadFile, "utf8");
+
+  // List research files if they exist
+  let researchFiles: string[] = [];
+  if (existsSync(researchDir)) {
+    researchFiles = readdirSync(researchDir).filter((f) => f.endsWith(".md"));
+  }
+
+  const researchList =
+    researchFiles.length > 0
+      ? researchFiles.map((f) => `- reports/${date}/research/${f}`).join("\n")
+      : "- (no research files available)";
+
+  const responsesDir = join(dateDir, "responses");
+  const maxReply = maxReplyNumber(responsesDir);
+  const responseNum = String(maxReply).padStart(2, "0");
+
+  return `You are Carlton's reply handler for the ${date} briefing.
+
+## Thread
+
+${threadContent}
+
+## Available Context
+
+If you need deeper context:
+${researchList}
+- reports/memory.txt — user preferences
+- Google tools: bunx gmcli, bunx gccli, bunx gdcli (read-only, use --help)
+
+Read what you need. You may not need any of it.
+
+## Respond
+
+Respond to all replies marked NEW above.
+1. Write response: reports/${date}/responses/${responseNum}-response.md
+   (NN = highest reply# being addressed)
+2. Send: bun carlton reply-to "${date} Carlton Briefing Notes" reports/${date}/responses/${responseNum}-response.md ${date}
+3. Update reports/memory.txt with user preferences if any
+4. rm reports/${date}/responses/.processing
+`;
 }
