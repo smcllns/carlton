@@ -12,7 +12,7 @@ Read-only meeting prep CLI. Pulls calendar events across multiple Google account
 ## Setup
 
 ```bash
-git clone <repo> && cd carlton
+git clone https://github.com/smcllns/carlton.git && cd carlton
 bun install
 
 # Auth setup
