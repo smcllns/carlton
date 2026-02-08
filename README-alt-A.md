@@ -54,30 +54,22 @@ Pragmatic TDD — clear types over high coverage, and one E2E test (`test/e2e.ts
 claude -p "run bun run test:e2e and tell me the results"   # Ask claude in tmux to run the e2e tests!
 ```
 
+## Auth
+
+Two sets of credentials:
+
+- **Google OAuth client credentials** — a Desktop App client from a Google Cloud project with Calendar, Gmail, and Drive APIs enabled. Drop the JSON into `credentials/` and run `bun carlton credentials` to register it with all three CLI tools (`gccli`, `gmcli`, `gdcli`). Then `bun carlton accounts add <email>` authenticates an account across all three.
+- **Resend API key** — set `RESEND_API_KEY` in `.env`. Used only for outbound email delivery.
+
+OAuth tokens are stored per-tool at `~/.gccli/`, `~/.gmcli/`, `~/.gdcli/`. These are the same CLIs you can use directly to query Google services (e.g. `bunx gmcli you@gmail.com search "query"`).
+
 ## Security Model
 
 Two isolation boundaries:
 
 1. **Google access is read-only.** Only `search`, `list`, `get` methods are used — no `send`, `create`, `update`, `delete`. [`test/safety.test.ts`](test/safety.test.ts) scans all source files for forbidden method calls and fails the build if any are found.
 
-2. **Google auth and email delivery are separate systems.** Google OAuth tokens (`~/.gmcli/`, `~/.gccli/`, `~/.gdcli/`) are used exclusively in `src/google.ts`. Email delivery (`src/email.ts`) uses a Resend API key from `.env`. Neither can access the other's credentials — `email.ts` cannot import `google.ts`, enforced by safety tests.
-
-```
-Google OAuth tokens → google.ts → read-only data
-Resend API key      → email.ts  → outbound email to user
-```
-
-## Auth
-
-Single Google Cloud project with Calendar, Gmail, and Drive APIs enabled. One OAuth Desktop App client credential shared across all three CLI tools (`gccli`, `gmcli`, `gdcli`). Each tool stores tokens independently:
-
-```
-~/.gccli/    # Calendar tokens
-~/.gmcli/    # Gmail tokens
-~/.gdcli/    # Drive tokens
-```
-
-`bun carlton credentials` registers the OAuth JSON with all three. `bun carlton accounts add <email>` authenticates an account across all three in one step.
+2. **Email delivery is deliberately separated from Google auth.** Carlton uses Resend (a third-party transactional email service) instead of Gmail's send API. This means even if an agent misbehaves, it cannot send email as the user or exfiltrate data through their Gmail account — the Google OAuth tokens have no send capability, and `email.ts` cannot import `google.ts` or access Google credentials (enforced by safety tests). The worst case is a bad email sent from Carlton's Resend domain, not from the user's identity.
 
 ## Folder Structure
 
