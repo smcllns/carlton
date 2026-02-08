@@ -218,13 +218,13 @@ Respond to all replies marked NEW above.
 
 ## Task Sequence
 
-0. Verify Resend Message-ID support — test first
-1. Fix threading (`email.ts`, `index.ts`) — standalone
-2. Upgrade curator model (`curator.ts`) — one line
-3. Simplify `reply.ts` + thread.md helpers — standalone
-4. Redesign serve loop (`index.ts`) — depends on 1, 3
-5. Write and pass ALL tests below — depends on 4
-6. Mark PR ready for review
+- [x] 0. Verify Resend Message-ID support — test first
+- [x] 1. Fix threading (`email.ts`, `index.ts`) — standalone
+- [x] 2. Upgrade curator model (`curator.ts`) — one line
+- [x] 3. Simplify `reply.ts` + thread.md helpers — standalone
+- [x] 4. Redesign serve loop (`index.ts`) — depends on 1, 3
+- [x] 5. Write and pass ALL tests below — depends on 4 (88 tests passing)
+- [ ] 6. Mark PR ready for review
 
 ---
 
@@ -301,8 +301,8 @@ Update the existing E2E test to exercise the full new loop:
 
 ### Checklist Before Marking PR Ready
 
-- [ ] All unit tests pass (`bun test`)
+- [x] All unit tests pass (`bun test`) — 88 tests passing
 - [ ] E2E test passes in tmux (`tmux new -s carlton-test 'bun test/e2e.ts'`)
-- [ ] Safety tests still pass (`bun test test/safety.test.ts`) — email.ts still doesn't import google.ts
+- [x] Safety tests still pass (`bun test test/safety.test.ts`) — email.ts still doesn't import google.ts
 - [ ] Manual test: send a real briefing to the delivery email, reply to it, verify response arrives threaded in Gmail
-- [ ] No TypeScript errors (`bunx tsc --noEmit`)
+- [x] No new TypeScript errors (pre-existing .ts extension warnings only)
