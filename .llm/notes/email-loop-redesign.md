@@ -71,8 +71,8 @@ The original design set `Message-ID: <carlton-{date}@carlton.local>` on outgoing
 - Unit tests: 89/89 passing
 - Safety tests: passing
 - E2E test: **passed** — 10/10 steps
-- Manual test: **in progress** — briefing sent for 2026-02-10, threading fix applied, needs Sam to reply and verify response threads correctly in Gmail
-- Remaining: manual Gmail threading verification, then mark PR ready
+- Manual test: **passed** — response arrived in same Gmail thread as briefing
+- PR marked ready for review
 
 ## How to Continue
 

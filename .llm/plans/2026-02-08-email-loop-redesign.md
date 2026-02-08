@@ -224,8 +224,8 @@ Respond to all replies marked NEW above.
 - [x] 3. Simplify `reply.ts` + thread.md helpers — standalone
 - [x] 4. Redesign serve loop (`index.ts`) — depends on 1, 3
 - [x] 5. Write and pass ALL tests below — depends on 4 (89 tests passing)
-- [ ] 6. Manual Gmail threading test — verify response threads correctly
-- [ ] 7. Mark PR ready for review
+- [x] 6. Manual Gmail threading test — verified, response threads correctly
+- [x] 7. Mark PR ready for review
 
 ---
 
@@ -305,5 +305,5 @@ Update the existing E2E test to exercise the full new loop:
 - [x] All unit tests pass (`bun test`) — 89 tests passing
 - [x] E2E test passes in tmux (`bun test/e2e.ts`) — 10/10 steps
 - [x] Safety tests still pass (`bun test test/safety.test.ts`)
-- [ ] Manual test: send briefing, reply in Gmail, verify response threads correctly
+- [x] Manual test: response threads correctly in Gmail
 - [x] No new TypeScript errors (pre-existing .ts extension warnings only)
