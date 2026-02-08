@@ -44,45 +44,6 @@ tmux new -s carlton 'bun carlton'    # send + poll for replies
 
 Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
 
-## How it works
-
-```
-                        ┌─────────────────────────────┐
-                        │      Google (read-only)      │
-                        │  Calendar · Gmail · Drive    │
-                        └──────────────┬──────────────┘
-                                       │
-                    ┌──────────────────┐│┌──────────────────┐
-                    │ Claude agent (1) │││ Claude agent (N) │
-                    │ research mtg 1   │││ research mtg N   │
-                    └────────┬─────────┘│└────────┬─────────┘
-                             └──────────┼─────────┘
-                                        ▼
-                   ┌─────────────────────────────────────┐
-         send      │           Curator agent             │
-                   │   compiles research → briefing.md   │
-                   └──────────────────┬──────────────────┘
-                                      ▼
-                              ┌───────────────┐
-                              │  Resend email  │──────► You
-                              └───────────────┘
-                                                         │
-  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-                                                         │
-                              ┌───────────────┐          │
-         serve                │  Gmail poll    │◄─ reply ─┘
-                              └───────┬───────┘
-                                      ▼
-                         ┌─────────────────────┐
-                         │   Claude agent      │
-                         │   research + reply   │
-                         └──────────┬──────────┘
-                                    ▼
-                            ┌───────────────┐
-                            │  Resend email  │──────► You
-                            └───────────────┘
-```
-
 ### How `send` works
 
 1. Fetches calendar events for the target date across all configured accounts
