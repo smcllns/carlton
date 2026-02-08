@@ -1,6 +1,6 @@
 # Carlton
 
-Pulls your calendar across multiple Google accounts, researches each meeting via Gmail/Calendar/Drive, and emails you a briefing. You can reply to the email to ask follow-up questions — Carlton picks up the reply, researches, and responds in-thread.
+A research assistant that lives in your inbox. Carlton pulls your calendar across multiple Google accounts, researches each meeting via Gmail/Calendar/Drive, and emails you a briefing. Reply to the email with a question and it researches that too — an ongoing conversation, not just a report.
 
 Read-only. Carlton never writes to your Google services. Email delivery is via [Resend](https://resend.com), separate from Google auth entirely.
 
