@@ -6,6 +6,7 @@
       "Edit(reports/**)",
       "Read(.carlton-reply.md)",
       "Read(PROMPT.md)",
+      "Write(PROMPT.*.proposed.md)",
       "Read(src/**)",
       "Write(src/*.self.md)",
       "Bash(git status:*)",

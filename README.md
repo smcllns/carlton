@@ -37,6 +37,23 @@ bun test                             # Run tests
 
 Reports are written to `reports/YYYY-MM-DD/`.
 
+### Development
+
+Both `send` and `serve` must run inside tmux (they spawn Claude agents as tmux panes).
+
+```bash
+tmux new -s carlton                           # start a tmux session first
+bun carlton send --test && bun carlton serve  # then run inside it
+```
+
+`--test` clears the sent marker so the briefing re-sends. Without it, `send` skips if a briefing was already sent for that date. Once `serve` starts, reply to the briefing email and watch Claude agents spawn as panes.
+
+E2E test (also requires tmux):
+
+```bash
+tmux new -s carlton-test 'bun test/e2e.ts'
+```
+
 ## Overview
 
 Carlton is a read-only meeting prep CLI that:

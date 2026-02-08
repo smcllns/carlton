@@ -314,6 +314,21 @@ async function cmdSend(date: string) {
   console.log(`Curator context written to: ${contextFile}\n`);
 
   spawnCurator(date, contextFile);
+
+  // Wait for curator to send the briefing, then confirm
+  const deadline = Date.now() + 180_000;
+  const check = async () => {
+    while (Date.now() < deadline) {
+      if (existsSync(sentMarker)) {
+        const messageId = readFileSync(sentMarker, "utf8").trim();
+        console.log(`✅ Briefing sent! (${messageId})`);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    console.log("⚠️  Curator timed out — briefing may not have sent. Check tmux windows.");
+  };
+  await check();
 }
 
 async function cmdSendBriefing(date: string) {
@@ -486,6 +501,9 @@ async function cmdServe() {
             const hash = replyContentHash(msg);
             if (processedIds.has(hash)) continue;
             processedIds.add(hash);
+
+            const isDraft = msg.labelIds?.includes("DRAFT");
+            if (isDraft) continue;
 
             const isFromUser = !msg.from?.includes("resend.dev");
             if (!isFromUser) continue;

@@ -89,12 +89,19 @@ The user replied to a Carlton meeting briefing email. Your job:
    - \`bunx gccli\` for Calendar (read-only)
    - \`bunx gdcli\` for Google Drive (read-only)
    - All tools support \`--help\` for usage
-4. Update the relevant report file with your findings
-5. Write your response to ${files.responseFile}, then send it: \`bun carlton reply-to "${meta.subject}" ${files.responseFile}\`
-6. Update reports/memory.txt with any USER PREFERENCES about briefing format, style, or content.
-   - Record preferences like "always start with a TLDR", "include links to sources", "use tables for timelines"
-   - Use category \`preference:\` for these entries
-   - Do NOT log process observations like "reply loop working" — only log things that should change future briefing output
+4. Write your response to ${files.responseFile}, then send it: \`bun carlton reply-to "${meta.subject}" ${files.responseFile}\`
+5. Update reports/memory.txt with any USER PREFERENCES about briefing format, style, or content.
+   - Use format: \`[YYYY-MM-DD] preference: one-line learning\`
+   - Do NOT log process observations — only things that should change future briefing output
+
+## Boundaries
+
+- **DO** update \`reports/memory.txt\` with user preferences
+- **DO** read \`PROMPT.md\` for context on the current briefing format
+- **DO NOT** edit \`PROMPT.md\` directly. If you want to propose changes, write a copy to \`PROMPT.reply-${files.responseFile.match(/(\d+)-response/)?.[1] ?? "00"}.proposed.md\` with your modifications. The user will review and apply async.
+- **DO NOT** edit source code (\`src/*.ts\`). If you want to propose code changes, write to \`src/<filename>.self.md\`.
+- **DO NOT** explore the codebase beyond what's needed to answer the user's question.
+- Stay focused: read the reply, research if needed, respond, log preferences, done.
 `;
 }
 

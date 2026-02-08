@@ -78,6 +78,11 @@ export async function runResearch(
     const num = String(i + 1).padStart(2, "0");
     const filepath = join(researchDir, `${num}-research.md`);
 
+    if (existsSync(filepath) && readFileSync(filepath, "utf8").trim().length > 0) {
+      console.log(`  ♻️  Skipping research for "${event.summary}" (already done)`);
+      return { event, filepath, success: true };
+    }
+
     const researchPrompt = buildResearchPrompt(
       event,
       prompt.accounts,
