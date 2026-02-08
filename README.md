@@ -11,9 +11,7 @@ Carlton fetches your calendar across multiple Google accounts, manages multiple 
 ## Prerequisites
 
 - [Bun](https://bun.sh) - runtime, build system, package manager
-- [tmux](https://github.com/tmux/tmux) — for managing multiple dynamic claude code instances (`serve`)
-  - macOS: `brew install tmux`
-  - Linux: `sudo apt install tmux`
+- [tmux](https://github.com/tmux/tmux) — for managing multiple dynamic claude code instances
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
 - Google Cloud OAuth credentials - for Calendar, Gmail, and Drive API auth
 - [Resend](https://resend.com) API key - for Carlton to be able to email you
