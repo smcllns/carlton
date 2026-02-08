@@ -25,7 +25,7 @@ import {
   formatBasicReport,
 } from "./report.ts";
 import { loadPrompt, type PromptConfig } from "./prompt.ts";
-import { sendBriefing, sendReply, type BriefingSentResult } from "./email.ts";
+import { sendBriefing, sendReply, extractMessageId, type BriefingSentResult } from "./email.ts";
 import { getGmail } from "./google.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync, appendFileSync } from "fs";
@@ -402,18 +402,22 @@ async function recordReply(account: string, threadId: string, msg: any) {
   const gmail = getGmail();
 
   let replyBody = msg.snippet || "";
+  let replyMessageId = "";
   try {
     const fullThread = await gmail.getThread(account, threadId);
     if (!Array.isArray(fullThread) && fullThread.messages) {
       const fullMsg = fullThread.messages.find((m: any) => m.id === msg.id);
-      if (fullMsg) replyBody = extractMessageBody(fullMsg);
+      if (fullMsg) {
+        replyBody = extractMessageBody(fullMsg);
+        replyMessageId = extractMessageId(fullMsg);
+      }
     }
   } catch (err: any) {
     console.error(`  Could not fetch full thread: ${err.message}`);
   }
 
   const msgDate = msg.date || new Date().toISOString();
-  return recordReplyDirect(msg.from, msg.subject || "", msgDate, replyBody);
+  return recordReplyDirect(msg.from, msg.subject || "", msgDate, replyBody, replyMessageId);
 }
 
 async function cmdServe() {
@@ -534,18 +538,13 @@ async function cmdServe() {
 async function cmdReplyTo(subject: string, bodyFile: string, date: string) {
   const prompt = loadPrompt();
   const body = readFileSync(bodyFile, "utf8");
-  const sentMarker = join(getReportsDir(), date, ".briefing-sent");
+  const replyIdFile = join(getReportsDir(), date, "responses", ".last-reply-id");
   const threadFile = join(getReportsDir(), date, "thread.md");
 
-  // Read the original briefing's messageId for threading
+  // Read the reply's Gmail Message-ID for threading (thread to user's reply, not briefing)
   let inReplyTo = "";
-  if (existsSync(sentMarker)) {
-    try {
-      const sentData: BriefingSentResult = JSON.parse(readFileSync(sentMarker, "utf8"));
-      inReplyTo = sentData.messageId;
-    } catch {
-      // Fall back to empty string if parsing fails (old format)
-    }
+  if (existsSync(replyIdFile)) {
+    inReplyTo = readFileSync(replyIdFile, "utf8").trim();
   }
 
   const resendId = await sendReply(prompt.delivery.email, subject, body, inReplyTo);

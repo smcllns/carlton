@@ -9,6 +9,17 @@ function getResend(): Resend {
 
 const FROM = "Carlton <onboarding@resend.dev>";
 
+/**
+ * Extract Message-ID header from a Gmail message.
+ * Used for threading responses to the user's reply.
+ */
+export function extractMessageId(msg: any): string {
+  const headers = msg.payload?.headers;
+  if (!Array.isArray(headers)) return "";
+  const header = headers.find((h: any) => h.name.toLowerCase() === "message-id");
+  return header?.value || "";
+}
+
 export interface BriefingSentResult {
   resendId: string;
   messageId: string;

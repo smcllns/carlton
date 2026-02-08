@@ -227,6 +227,41 @@ describe("recordReplyDirect", () => {
     expect(threadContent).toContain("## NEW Reply #2");
     expect(threadContent).toContain("## NEW Reply #3");
   });
+
+  test("saves Gmail Message-ID to .last-reply-id when provided", () => {
+    const messageId = "<abc123@mail.gmail.com>";
+    recordReplyDirect(
+      "user@test.com",
+      `${TEST_DATE} Briefing`,
+      new Date().toISOString(),
+      "Reply body",
+      messageId
+    );
+
+    const lastReplyIdFile = join(getResponsesDir(), ".last-reply-id");
+    expect(existsSync(lastReplyIdFile)).toBe(true);
+    expect(readFileSync(lastReplyIdFile, "utf8")).toBe(messageId);
+  });
+
+  test("overwrites .last-reply-id with latest reply Message-ID", () => {
+    recordReplyDirect("user@test.com", `${TEST_DATE} Briefing`, new Date().toISOString(), "First", "<first@gmail.com>");
+    recordReplyDirect("user@test.com", `${TEST_DATE} Briefing`, new Date().toISOString(), "Second", "<second@gmail.com>");
+
+    const lastReplyIdFile = join(getResponsesDir(), ".last-reply-id");
+    expect(readFileSync(lastReplyIdFile, "utf8")).toBe("<second@gmail.com>");
+  });
+
+  test("does not create .last-reply-id when Message-ID not provided", () => {
+    recordReplyDirect(
+      "user@test.com",
+      `${TEST_DATE} Briefing`,
+      new Date().toISOString(),
+      "Reply without Message-ID"
+    );
+
+    const lastReplyIdFile = join(getResponsesDir(), ".last-reply-id");
+    expect(existsSync(lastReplyIdFile)).toBe(false);
+  });
 });
 
 describe("isLockStale", () => {

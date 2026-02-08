@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
 import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
+import { extractMessageId } from "../src/email.ts";
 
 const TEST_DIR = join(import.meta.dir, "..", ".test-email");
 
@@ -68,18 +69,65 @@ describe(".briefing-sent format", () => {
   });
 });
 
+describe("extractMessageId", () => {
+  test("extracts Message-ID from Gmail message headers", () => {
+    const msg = {
+      payload: {
+        headers: [
+          { name: "From", value: "user@gmail.com" },
+          { name: "Message-ID", value: "<abc123@mail.gmail.com>" },
+          { name: "Subject", value: "Re: Test" },
+        ],
+      },
+    };
+
+    expect(extractMessageId(msg)).toBe("<abc123@mail.gmail.com>");
+  });
+
+  test("handles case-insensitive header name", () => {
+    const msg = {
+      payload: {
+        headers: [
+          { name: "message-id", value: "<lower@mail.gmail.com>" },
+        ],
+      },
+    };
+
+    expect(extractMessageId(msg)).toBe("<lower@mail.gmail.com>");
+  });
+
+  test("returns empty string when Message-ID header missing", () => {
+    const msg = {
+      payload: {
+        headers: [
+          { name: "From", value: "user@gmail.com" },
+        ],
+      },
+    };
+
+    expect(extractMessageId(msg)).toBe("");
+  });
+
+  test("returns empty string for malformed message", () => {
+    expect(extractMessageId({})).toBe("");
+    expect(extractMessageId({ payload: {} })).toBe("");
+    expect(extractMessageId({ payload: { headers: null } })).toBe("");
+  });
+});
+
 describe("email threading headers", () => {
   test("In-Reply-To and References should use same messageId", () => {
-    const originalMessageId = "<carlton-2026-02-09@carlton.local>";
+    // Now using the reply's Gmail Message-ID instead of briefing's Message-ID
+    const replyMessageId = "<abc123@mail.gmail.com>";
 
     // Simulating what sendReply does
     const headers = {
-      "In-Reply-To": originalMessageId,
-      References: originalMessageId,
+      "In-Reply-To": replyMessageId,
+      References: replyMessageId,
     };
 
-    expect(headers["In-Reply-To"]).toBe(originalMessageId);
-    expect(headers.References).toBe(originalMessageId);
+    expect(headers["In-Reply-To"]).toBe(replyMessageId);
+    expect(headers.References).toBe(replyMessageId);
     expect(headers["In-Reply-To"]).toBe(headers.References);
   });
 
@@ -96,61 +144,46 @@ describe("email threading headers", () => {
   });
 });
 
-describe("cmdReplyTo reads messageId from .briefing-sent", () => {
-  test("extracts messageId from JSON format", () => {
-    const sentFile = join(TEST_DIR, ".briefing-sent");
-    const sentData = {
-      resendId: "re_test123",
-      messageId: "<carlton-2026-02-09@carlton.local>",
-    };
-    writeFileSync(sentFile, JSON.stringify(sentData));
+describe("cmdReplyTo reads messageId from .last-reply-id", () => {
+  test("reads Gmail Message-ID from .last-reply-id file", () => {
+    const responsesDir = join(TEST_DIR, "responses");
+    mkdirSync(responsesDir, { recursive: true });
+    const replyIdFile = join(responsesDir, ".last-reply-id");
+    writeFileSync(replyIdFile, "<abc123@mail.gmail.com>");
 
     // Simulating cmdReplyTo logic
     let inReplyTo = "";
-    if (existsSync(sentFile)) {
-      try {
-        const parsed = JSON.parse(readFileSync(sentFile, "utf8"));
-        inReplyTo = parsed.messageId || "";
-      } catch {
-        inReplyTo = "";
-      }
+    if (existsSync(replyIdFile)) {
+      inReplyTo = readFileSync(replyIdFile, "utf8").trim();
     }
 
-    expect(inReplyTo).toBe("<carlton-2026-02-09@carlton.local>");
+    expect(inReplyTo).toBe("<abc123@mail.gmail.com>");
   });
 
-  test("handles missing .briefing-sent file", () => {
-    const sentFile = join(TEST_DIR, ".briefing-sent");
+  test("handles missing .last-reply-id file", () => {
+    const replyIdFile = join(TEST_DIR, "responses", ".last-reply-id");
 
     // Simulating cmdReplyTo logic
     let inReplyTo = "";
-    if (existsSync(sentFile)) {
-      try {
-        const parsed = JSON.parse(readFileSync(sentFile, "utf8"));
-        inReplyTo = parsed.messageId || "";
-      } catch {
-        inReplyTo = "";
-      }
+    if (existsSync(replyIdFile)) {
+      inReplyTo = readFileSync(replyIdFile, "utf8").trim();
     }
 
     expect(inReplyTo).toBe("");
   });
 
-  test("handles malformed JSON gracefully", () => {
-    const sentFile = join(TEST_DIR, ".briefing-sent");
-    writeFileSync(sentFile, "not valid json {{{");
+  test("trims whitespace from Message-ID", () => {
+    const responsesDir = join(TEST_DIR, "responses");
+    mkdirSync(responsesDir, { recursive: true });
+    const replyIdFile = join(responsesDir, ".last-reply-id");
+    writeFileSync(replyIdFile, "  <abc123@mail.gmail.com>\n");
 
     // Simulating cmdReplyTo logic
     let inReplyTo = "";
-    if (existsSync(sentFile)) {
-      try {
-        const parsed = JSON.parse(readFileSync(sentFile, "utf8"));
-        inReplyTo = parsed.messageId || "";
-      } catch {
-        inReplyTo = "";
-      }
+    if (existsSync(replyIdFile)) {
+      inReplyTo = readFileSync(replyIdFile, "utf8").trim();
     }
 
-    expect(inReplyTo).toBe("");
+    expect(inReplyTo).toBe("<abc123@mail.gmail.com>");
   });
 });

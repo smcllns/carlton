@@ -162,12 +162,15 @@ export function triggerProcessing(date: string, staleMinutes: number = 10): Trig
 /**
  * Record a reply without Gmail fetch (for testing or when body is already known).
  * Returns the date extracted from subject.
+ *
+ * @param replyMessageId - Gmail Message-ID of the reply, used for threading responses
  */
 export function recordReplyDirect(
   from: string,
   subject: string,
   msgDate: string,
-  body: string
+  body: string,
+  replyMessageId?: string
 ): string {
   const match = subject.match(/(\d{4}-\d{2}-\d{2})/);
   const date = match ? match[1] : new Date().toISOString().split("T")[0];
@@ -181,6 +184,11 @@ export function recordReplyDirect(
 
   // Write the reply file
   writeReplyFile(paths.replyFile, num, from, msgDate, subject, body);
+
+  // Save reply's Message-ID for threading responses
+  if (replyMessageId) {
+    writeFileSync(join(responsesDir, ".last-reply-id"), replyMessageId, "utf8");
+  }
 
   // Append to thread.md with NEW marker
   appendToThread(threadFile, `NEW Reply #${num} (${msgDate} from ${from})`, body);
