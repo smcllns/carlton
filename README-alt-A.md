@@ -56,20 +56,28 @@ claude -p "run bun run test:e2e and tell me the results"   # Ask claude in tmux 
 
 ## Security Model
 
-Carlton separates **reading user data** from **sending output**:
+Two isolation boundaries:
 
-- **Google services (Gmail, Calendar, Drive) are read-only** — enforced by code and safety tests. Carlton can search, list, and get. It cannot send, create, update, or delete.
-- **Email delivery uses Resend**, a separate transactional email API. Carlton sends briefings *to* the user — it cannot send *as* the user.
-- **`src/email.ts` is isolated from Google** — it cannot import `google.ts` or access Google credentials. Safety tests enforce this.
-- **Data flow:** Google (read) → Carlton (process) → Resend (send to user)
+1. **Google access is read-only.** Only `search`, `list`, `get` methods are used — no `send`, `create`, `update`, `delete`. [`test/safety.test.ts`](test/safety.test.ts) scans all source files for forbidden method calls and fails the build if any are found.
 
-## Auth Strategy
+2. **Google auth and email delivery are separate systems.** Google OAuth tokens (`~/.gmcli/`, `~/.gccli/`, `~/.gdcli/`) are used exclusively in `src/google.ts`. Email delivery (`src/email.ts`) uses a Resend API key from `.env`. Neither can access the other's credentials — `email.ts` cannot import `google.ts`, enforced by safety tests.
 
-- One Google Cloud project with Gmail API, Calendar API, and Drive API enabled
-- One OAuth Desktop App client → download credentials JSON
-- `bun carlton credentials` registers the same credentials file with all three tools
-- `bun carlton accounts add you@gmail.com` adds an account to all three tools in one command
-- Tokens stored separately in `~/.gmcli/`, `~/.gccli/`, `~/.gdcli/`
+```
+Google OAuth tokens → google.ts → read-only data
+Resend API key      → email.ts  → outbound email to user
+```
+
+## Auth
+
+Single Google Cloud project with Calendar, Gmail, and Drive APIs enabled. One OAuth Desktop App client credential shared across all three CLI tools (`gccli`, `gmcli`, `gdcli`). Each tool stores tokens independently:
+
+```
+~/.gccli/    # Calendar tokens
+~/.gmcli/    # Gmail tokens
+~/.gdcli/    # Drive tokens
+```
+
+`bun carlton credentials` registers the OAuth JSON with all three. `bun carlton accounts add <email>` authenticates an account across all three in one step.
 
 ## Folder Structure
 
