@@ -148,3 +148,15 @@ The briefing pipeline works. The reply loop is where the hard problems are:
 - **Context window limits.** Thread history grows with each reply. At some point the context file exceeds what Claude can usefully process. No truncation strategy yet.
 - **Memory vs. code changes.** When a user says "always start with a joke", should that go in `memory.txt` (read by future agents) or in `src/report.ts` (changes the code)? Currently agents do both inconsistently.
 - **One session per day.** Right now each reply spawns a new stateless Claude. Ideally there's one long-running Claude session per day (`claude --continue`) that handles all replies with full context — no thread history stitching, no parallel agent sprawl. The current architecture over-spawns.
+
+---
+
+## For LLMs
+
+If you're an agent working on this codebase:
+
+1. **Read [`CLAUDE.md`](CLAUDE.md) first.** Safety rules, file map, what you can and can't do. Non-negotiable.
+2. **Read [`reports/memory.txt`](reports/memory.txt).** Accumulated learnings from previous agents — preferences, gotchas, process notes. Don't repeat mistakes already logged here.
+3. **Don't modify [`PROMPT.md`](PROMPT.md).** It's user config. Read it for account info and preferences.
+4. **Google is read-only.** If you're adding functionality, it must be search/list/get only. `test/safety.test.ts` will catch violations. `email.ts` cannot touch `google.ts`. No exceptions.
+5. **CLI syntax is `<email> <command>`.** Not `<command> <args>`. E.g. `bunx gmcli you@gmail.com search "query"`. Dates need ISO 8601 with timezone: `--from "2026-02-09T00:00:00-08:00"`.
