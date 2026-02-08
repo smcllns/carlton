@@ -32,8 +32,8 @@ Edit [`PROMPT.md`](PROMPT.md) to configure your accounts, delivery address, and 
 ## Usage
 
 ```bash
-bun carlton send [date]              # Research tomorrow (or date), email briefing
-bun carlton [date]                   # Same but local only, no email
+bun carlton [date]                   # Research tomorrow (or date), local only
+bun carlton send [date]              # Same but emails the briefing
 ```
 
 Carlton spawns parallel Claude sessions to handle replies, so run it inside tmux to manage them:
