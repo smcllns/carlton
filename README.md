@@ -138,8 +138,12 @@ carlton/
 - [`PROMPT.md`](PROMPT.md) — User configuration (accounts, delivery, preferences)
 - [`CLAUDE.md`](CLAUDE.md) — Agent instructions and safety rules
 
-## Known Limitations
+## Open Questions
 
-- **Reply agent permissions.** Claude agents spawned to handle replies currently need interactive permission approval via tmux. Once the permission set stabilizes, this can go fully headless.
-- **Thread context growth.** Each reply adds to the thread history. No truncation strategy yet — at some point the context will exceed Claude's window.
-- **Concurrency.** Multiple parallel replies can write to `reports/` and `memory.txt` simultaneously. No locking mechanism.
+The briefing pipeline works. The reply loop is where the hard problems are:
+
+- **Permission bootstrapping.** Reply agents need to approve tool permissions interactively via tmux before they can go headless. How many sessions until the permission set stabilizes? Can we seed a good default set?
+- **Agent quality control.** A spawned Claude can research, write files, and send email. What guardrails prevent a bad response from going out? Currently: none beyond the safety tests on Google writes.
+- **Concurrency.** Multiple replies can arrive while an agent is working. They spawn in parallel tmux panes, but they're all reading/writing to the same `reports/` directory and `memory.txt`. No locking.
+- **Context window limits.** Thread history grows with each reply. At some point the context file exceeds what Claude can usefully process. No truncation strategy yet.
+- **Memory vs. code changes.** When a user says "always start with a joke", should that go in `memory.txt` (read by future agents) or in `src/report.ts` (changes the code)? Currently agents do both inconsistently.
