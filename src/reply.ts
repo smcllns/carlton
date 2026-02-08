@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readdirSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
 import { getReportsDir } from "./config.ts";
 
 export function maxReplyNumber(responsesDir: string): number {
@@ -26,7 +26,7 @@ export function hasUnprocessedReplies(responsesDir: string): boolean {
   return maxReplyNumber(responsesDir) > maxResponseNumber(responsesDir);
 }
 
-export function nextResponseNumber(responsesDir: string): number {
+export function nextReplyNumber(responsesDir: string): number {
   return maxReplyNumber(responsesDir) + 1;
 }
 
@@ -51,6 +51,7 @@ ${body}
 
 export function appendToThread(threadFile: string, section: string, content: string): void {
   const entry = `\n---\n\n## ${section}\n\n${content}\n`;
+  mkdirSync(dirname(threadFile), { recursive: true });
   if (!existsSync(threadFile)) {
     writeFileSync(threadFile, entry, "utf8");
   } else {

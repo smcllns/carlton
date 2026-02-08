@@ -30,7 +30,7 @@ import { getGmail } from "./google.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync, statSync } from "fs";
 import {
-  nextResponseNumber,
+  nextReplyNumber,
   hasUnprocessedReplies,
   writeReplyFile,
   replyFilePaths,
@@ -409,7 +409,7 @@ async function recordReply(account: string, threadId: string, msg: any) {
   const responsesDir = join(getReportsDir(), date, "responses");
   mkdirSync(responsesDir, { recursive: true });
 
-  const num = nextResponseNumber(responsesDir);
+  const num = nextReplyNumber(responsesDir);
   const paths = replyFilePaths(responsesDir, num);
   const msgDate = msg.date || new Date().toISOString();
 
@@ -434,8 +434,9 @@ function cleanStaleLocks(date: string) {
   }
 }
 
-export function triggerProcessing(date: string, spawnFn?: (date: string) => void) {
-  const responsesDir = join(getReportsDir(), date, "responses");
+export function triggerProcessing(date: string, opts?: { spawnFn?: (date: string) => void; reportsDir?: string }) {
+  const reportsDir = opts?.reportsDir || getReportsDir();
+  const responsesDir = join(reportsDir, date, "responses");
   const lockFile = join(responsesDir, ".processing");
 
   if (existsSync(lockFile)) return;
@@ -443,8 +444,13 @@ export function triggerProcessing(date: string, spawnFn?: (date: string) => void
 
   mkdirSync(responsesDir, { recursive: true });
   writeFileSync(lockFile, new Date().toISOString());
-  const spawn = spawnFn || spawnClaudeInTmux;
-  spawn(date);
+  try {
+    const spawn = opts?.spawnFn || spawnClaudeInTmux;
+    spawn(date);
+  } catch (err) {
+    unlinkSync(lockFile);
+    throw err;
+  }
 }
 
 function spawnClaudeInTmux(date: string) {
@@ -590,7 +596,9 @@ async function cmdReplyTo(subject: string, bodyFile: string, date?: string) {
       try {
         const info = JSON.parse(readFileSync(sentMarker, "utf8"));
         inReplyTo = info.messageId || "";
-      } catch {}
+      } catch {
+        console.error(`⚠️  .briefing-sent is old format (plain text). Email threading won't work for ${date}.`);
+      }
     }
   }
 
@@ -663,6 +671,10 @@ function cmdReset() {
 
 // --- Main ---
 
+const isCLI = process.argv[1]?.endsWith("index.ts") || process.argv[1]?.endsWith("carlton");
+
+if (isCLI) {
+
 const args = process.argv.slice(2);
 const command = args[0];
 
@@ -711,3 +723,5 @@ if (!command) {
   console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|reply-to <subject> <file> [date]|reset]");
   process.exit(1);
 }
+
+} // end isCLI

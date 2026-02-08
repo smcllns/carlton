@@ -5,7 +5,7 @@ import {
   maxReplyNumber,
   maxResponseNumber,
   hasUnprocessedReplies,
-  nextResponseNumber,
+  nextReplyNumber,
   writeReplyFile,
   replyFilePaths,
   appendToThread,
@@ -131,15 +131,15 @@ describe("hasUnprocessedReplies", () => {
   });
 });
 
-describe("nextResponseNumber", () => {
+describe("nextReplyNumber", () => {
   test("returns 1 for empty directory", () => {
-    expect(nextResponseNumber(TEST_DIR)).toBe(1);
+    expect(nextReplyNumber(TEST_DIR)).toBe(1);
   });
 
   test("returns max reply + 1", () => {
     writeFileSync(join(TEST_DIR, "01-reply.md"), "reply");
     writeFileSync(join(TEST_DIR, "02-reply.md"), "reply");
-    expect(nextResponseNumber(TEST_DIR)).toBe(3);
+    expect(nextReplyNumber(TEST_DIR)).toBe(3);
   });
 });
 
@@ -164,6 +164,12 @@ describe("appendToThread", () => {
     const content = readFileSync(threadFile, "utf8");
     expect(content).toContain("## Reply #1");
     expect(content).toContain("Hello");
+  });
+
+  test("creates parent directories if missing", () => {
+    const threadFile = join(TEST_DIR, "nested", "deep", "thread.md");
+    appendToThread(threadFile, "Reply #1", "Hello");
+    expect(existsSync(threadFile)).toBe(true);
   });
 
   test("appends to existing file", () => {

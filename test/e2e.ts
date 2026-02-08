@@ -17,7 +17,7 @@ import { getProjectRoot, getReportsDir } from "../src/config.ts";
 import { loadPrompt } from "../src/prompt.ts";
 import { sendBriefing } from "../src/email.ts";
 import {
-  nextResponseNumber,
+  nextReplyNumber,
   hasUnprocessedReplies,
   writeReplyFile,
   replyFilePaths,
@@ -178,7 +178,7 @@ async function step2_doubleSendBlocked() {
 async function step3_simulateReply1() {
   mkdirSync(RESPONSES_DIR, { recursive: true });
 
-  const num = nextResponseNumber(RESPONSES_DIR);
+  const num = nextReplyNumber(RESPONSES_DIR);
   assert(num === 1, `Expected reply number 1, got ${num}`);
 
   const paths = replyFilePaths(RESPONSES_DIR, num);
@@ -248,7 +248,7 @@ async function step6_simulateReplies2and3() {
   if (existsSync(lockFile)) unlinkSync(lockFile); // ensure clean state
 
   // Reply #2
-  const num2 = nextResponseNumber(RESPONSES_DIR);
+  const num2 = nextReplyNumber(RESPONSES_DIR);
   const paths2 = replyFilePaths(RESPONSES_DIR, num2);
   writeReplyFile(paths2.replyFile, num2, "testuser@example.com", new Date().toISOString(),
     TEST_SUBJECT, "Can you add the zoom link for that standup?");
@@ -257,7 +257,7 @@ async function step6_simulateReplies2and3() {
     "Can you add the zoom link for that standup?");
 
   // Reply #3
-  const num3 = nextResponseNumber(RESPONSES_DIR);
+  const num3 = nextReplyNumber(RESPONSES_DIR);
   const paths3 = replyFilePaths(RESPONSES_DIR, num3);
   writeReplyFile(paths3.replyFile, num3, "testuser@example.com", new Date().toISOString(),
     TEST_SUBJECT, "Also, what was discussed in last week's standup?");
@@ -329,7 +329,7 @@ async function step8_lockPreventsSpawn() {
   if (existsSync(lockFile)) unlinkSync(lockFile);
 
   // Write a new reply
-  const num = nextResponseNumber(RESPONSES_DIR);
+  const num = nextReplyNumber(RESPONSES_DIR);
   const paths = replyFilePaths(RESPONSES_DIR, num);
   writeReplyFile(paths.replyFile, num, "testuser@example.com", new Date().toISOString(),
     TEST_SUBJECT, "Lock test reply");
