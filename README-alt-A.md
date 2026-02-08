@@ -68,7 +68,7 @@ Pragmatic TDD — clear types over high coverage, and one E2E test (`test/e2e.ts
 
 ```bash
 bun test                             # Unit tests
-bun run test:e2e                     # E2E — splits a tmux pane so Claude can read the results
+claude -p "run bun run test:e2e and tell me the results"   # E2E — splits a tmux pane, Claude reads the output
 ```
 
 ## Security Model
