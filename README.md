@@ -155,8 +155,6 @@ The briefing pipeline works. The reply loop is where the hard problems are:
 
 If you're an agent working on this codebase:
 
-1. **Read [`CLAUDE.md`](CLAUDE.md) first.** Safety rules, file map, what you can and can't do. Non-negotiable.
-2. **Read [`reports/memory.txt`](reports/memory.txt).** Accumulated learnings from previous agents — preferences, gotchas, process notes. Don't repeat mistakes already logged here.
-3. **Don't modify [`PROMPT.md`](PROMPT.md).** It's user config. Read it for account info and preferences.
-4. **Google is read-only.** If you're adding functionality, it must be search/list/get only. `test/safety.test.ts` will catch violations. `email.ts` cannot touch `google.ts`. No exceptions.
-5. **CLI syntax is `<email> <command>`.** Not `<command> <args>`. E.g. `bunx gmcli you@gmail.com search "query"`. Dates need ISO 8601 with timezone: `--from "2026-02-09T00:00:00-08:00"`.
+1. **[`CLAUDE.md`](CLAUDE.md)** — Safety rules, file map, what you can and can't do. Read first, non-negotiable.
+2. **[`reports/memory.txt`](reports/memory.txt)** — Accumulated learnings from previous agents. Don't repeat mistakes already logged here.
+3. **[`PROMPT.md`](PROMPT.md)** — User config (accounts, preferences). Read it, don't modify it.
