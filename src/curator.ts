@@ -115,11 +115,14 @@ export function spawnCurator(date: string, contextFile: string): void {
   const projectRoot = getProjectRoot();
   const windowName = `curator-${date}`;
   const contextRelative = contextFile.replace(projectRoot + "/", "");
-  const claudeCmd = `claude -p "Read ${contextRelative} — it contains all research, meeting data, and your instructions. You have all the information you need. Do not search for additional information. If you want more context on user preferences, check reports/memory.txt. Follow the task instructions at the end of that file."`;
+  const allowedTools = "Read(reports/**),Write(reports/**),Bash(bun carlton send-briefing:*)";
+  const prompt = `Read ${contextRelative} — it contains all research, meeting data, and your instructions. You have all the information you need. Do not search for additional information. If you want more context on user preferences, check reports/memory.txt. Follow the task instructions at the end of that file.`;
 
-  console.log(`🤖 Spawning curator in tmux window '${windowName}'`);
-  Bun.spawn(
-    ["tmux", "new-window", "-d", "-n", windowName, "-c", projectRoot, claudeCmd],
-    { stdio: ["ignore", "ignore", "ignore"] },
+  console.log(`🤖 Spawning curator...`);
+  const proc = Bun.spawn(
+    ["claude", "-p", "--model", "haiku", "--allowedTools", allowedTools],
+    { cwd: projectRoot, stdio: ["pipe", "ignore", "ignore"] },
   );
+  proc.stdin.write(prompt);
+  proc.stdin.end();
 }
