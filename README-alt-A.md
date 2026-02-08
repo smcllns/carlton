@@ -46,24 +46,6 @@ bun carlton serve
 
 Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
 
-### How `send` works
-
-1. Fetches calendar events for the target date across all configured accounts
-2. Spawns parallel Claude agents (haiku) to research each meeting via Gmail, Calendar, and Drive
-3. Hands all research to a curator agent that compiles a polished briefing
-4. Curator sends the briefing email via Resend
-
-No tmux required. Runs headlessly.
-
-### How `serve` works
-
-Polls Gmail for replies to briefing emails. When a reply is detected, spawns an interactive Claude agent in a tmux window to research and respond. Requires tmux.
-
-```bash
-tmux new -s carlton
-bun carlton serve
-```
-
 ### Testing
 
 Pragmatic TDD — clear types over high coverage, and one E2E test (`test/e2e.ts`) that exercises the full send → reply → response cycle. Ask Claude to run it from inside a tmux session:
