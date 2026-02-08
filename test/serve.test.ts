@@ -11,6 +11,7 @@ function setupTestDate(date: string) {
   const dateDir = join(REPORTS_DIR, date);
   const responsesDir = join(dateDir, "responses");
   mkdirSync(responsesDir, { recursive: true });
+  writeFileSync(join(dateDir, "thread.md"), `# Carlton Thread — ${date}\n`);
   return { dateDir, responsesDir };
 }
 
@@ -49,6 +50,22 @@ describe("triggerProcessing", () => {
     });
 
     expect(spawnCalled).toBe(false);
+  });
+
+  test("skips when no thread.md (pre-redesign date)", () => {
+    const dateDir = join(REPORTS_DIR, "2099-01-10");
+    const responsesDir = join(dateDir, "responses");
+    mkdirSync(responsesDir, { recursive: true });
+    writeFileSync(join(responsesDir, "01-reply.md"), "reply");
+
+    let spawnCalled = false;
+    triggerProcessing("2099-01-10", {
+      spawnFn: () => { spawnCalled = true; },
+      reportsDir: REPORTS_DIR,
+    });
+
+    expect(spawnCalled).toBe(false);
+    expect(existsSync(join(responsesDir, ".processing"))).toBe(false);
   });
 
   test("skips when no unprocessed replies", () => {

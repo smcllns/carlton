@@ -391,15 +391,26 @@ function parseDateFromSubject(subject: string): string | null {
   return match ? match[1] : null;
 }
 
+function extractMessageId(msg: any): string {
+  const headers = msg.payload?.headers;
+  if (!Array.isArray(headers)) return "";
+  const header = headers.find((h: any) => h.name.toLowerCase() === "message-id");
+  return header?.value || "";
+}
+
 async function recordReply(account: string, threadId: string, msg: any) {
   const gmail = getGmail();
 
   let replyBody = msg.snippet || "";
+  let replyMessageId = "";
   try {
     const fullThread = await gmail.getThread(account, threadId);
     if (!Array.isArray(fullThread) && fullThread.messages) {
       const fullMsg = fullThread.messages.find((m: any) => m.id === msg.id);
-      if (fullMsg) replyBody = extractMessageBody(fullMsg);
+      if (fullMsg) {
+        replyBody = extractMessageBody(fullMsg);
+        replyMessageId = extractMessageId(fullMsg);
+      }
     }
   } catch (err: any) {
     console.error(`  Could not fetch full thread: ${err.message}`);
@@ -414,6 +425,11 @@ async function recordReply(account: string, threadId: string, msg: any) {
   const msgDate = msg.date || new Date().toISOString();
 
   writeReplyFile(paths.replyFile, num, msg.from, msgDate, msg.subject, replyBody);
+
+  // Save reply's Message-ID for threading responses
+  if (replyMessageId) {
+    writeFileSync(join(responsesDir, ".last-reply-id"), replyMessageId, "utf8");
+  }
 
   // Append to thread.md
   const threadFile = join(getReportsDir(), date, "thread.md");
@@ -438,9 +454,11 @@ export function triggerProcessing(date: string, opts?: { spawnFn?: (date: string
   const reportsDir = opts?.reportsDir || getReportsDir();
   const responsesDir = join(reportsDir, date, "responses");
   const lockFile = join(responsesDir, ".processing");
+  const threadFile = join(reportsDir, date, "thread.md");
 
   if (existsSync(lockFile)) return;
   if (!hasUnprocessedReplies(responsesDir)) return;
+  if (!existsSync(threadFile)) return;
 
   mkdirSync(responsesDir, { recursive: true });
   writeFileSync(lockFile, new Date().toISOString());
@@ -484,7 +502,8 @@ async function cmdServe() {
 
   console.log("Carlton - Listening for email replies...");
   console.log(`  Monitoring: ${accounts.join(", ")}`);
-  console.log(`  Delivery to: ${prompt.delivery.email}\n`);
+  const deliveryEmail = process.env.CARLTON_DELIVERY_EMAIL || prompt.delivery.email;
+  console.log(`  Delivery to: ${deliveryEmail}\n`);
 
   const idsFile = join(getProjectRoot(), ".carlton-processed-ids");
   const processedIds = new Set<string>(
@@ -588,17 +607,12 @@ async function cmdReplyTo(subject: string, bodyFile: string, date?: string) {
   const prompt = loadPrompt();
   const body = readFileSync(bodyFile, "utf8");
 
-  // Read .briefing-sent for threading
+  // Read .last-reply-id for threading (reply's actual Gmail Message-ID)
   let inReplyTo = "";
   if (date) {
-    const sentMarker = join(getReportsDir(), date, ".briefing-sent");
-    if (existsSync(sentMarker)) {
-      try {
-        const info = JSON.parse(readFileSync(sentMarker, "utf8"));
-        inReplyTo = info.messageId || "";
-      } catch {
-        console.error(`⚠️  .briefing-sent is old format (plain text). Email threading won't work for ${date}.`);
-      }
+    const replyIdFile = join(getReportsDir(), date, "responses", ".last-reply-id");
+    if (existsSync(replyIdFile)) {
+      inReplyTo = readFileSync(replyIdFile, "utf8").trim();
     }
   }
 
