@@ -62,11 +62,17 @@ tmux new -s carlton
 bun carlton serve
 ```
 
-### E2E test
+### Testing
+
+Unit tests are TDD-style but pragmatic, not comprehensive — we rely on clear types and a small number of E2E tests rather than high unit test coverage.
 
 ```bash
-tmux new -s carlton-test 'bun test/e2e.ts'
+bun test                             # Unit tests
 ```
+
+There's one E2E test (`test/e2e.ts`) that exercises the full cycle: create report → send briefing → double-send guard → simulate reply → Claude response → second reply with thread history → cleanup. It's the only E2E test Carlton needs.
+
+The best way to run it is to ask Claude to run `bun run test:e2e` from inside a tmux session. This splits a pane to the right with the test output, and Claude can read the results back from the adjacent pane to tell you what happened.
 
 ## Security Model
 
