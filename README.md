@@ -1,13 +1,17 @@
 # Carlton
 
-Pulls your calendar across multiple Google accounts, researches each meeting via Gmail/Calendar/Drive, and emails you a briefing. You can reply to the email to ask follow-up questions — Carlton picks up the reply, researches, and responds in-thread.
+Meeting prep from your calendar, researched in parallel, delivered by email. Reply to ask follow-ups.
 
-Read-only. Carlton never writes to your Google services. Email delivery is via [Resend](https://resend.com), separate from Google auth entirely.
+Carlton fetches your calendar across multiple Google accounts, spawns Claude agents to research each meeting (Gmail, Calendar, Drive), compiles a briefing, and emails it. Reply to the briefing and Carlton picks up the reply, researches your question, and responds in-thread.
+
+**Read-only and isolated.** Carlton never writes to Google services. Email delivery uses [Resend](https://resend.com) (separate auth) so it cannot send email as you, only to you.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh)
-- [tmux](https://github.com/tmux/tmux) — `brew install tmux` (macOS) or `sudo apt install tmux` (Debian)
+- [tmux](https://github.com/tmux/tmux) — for the reply handler (`serve`)
+  - macOS: `brew install tmux`
+  - Linux: `sudo apt install tmux`
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
 - Google Cloud project with Calendar, Gmail, and Drive APIs enabled
 - [Resend](https://resend.com) API key
@@ -18,13 +22,13 @@ Read-only. Carlton never writes to your Google services. Email delivery is via [
 git clone https://github.com/smcllns/carlton.git && cd carlton
 bun install
 
-# Google OAuth — drops credentials and authenticates each account
-bun carlton credentials                       # Register your OAuth JSON from credentials/
-bun carlton accounts add you@gmail.com        # Opens browser for OAuth
-bun carlton setup                             # Verify everything works
+# Google OAuth
+bun carlton credentials                 # Register your OAuth JSON from credentials/
+bun carlton accounts add you@gmail.com  # Opens browser for OAuth
+bun carlton setup                       # Verify everything works
 
-# Set up your .env file with Resend key
-cp .env.example .env
+# Email delivery
+cp .env.example .env                    # Add your RESEND_API_KEY
 ```
 
 Edit [`PROMPT.md`](PROMPT.md) to configure your accounts, delivery address, and briefing preferences. Run `bun carlton auth` for detailed setup instructions.
@@ -32,54 +36,79 @@ Edit [`PROMPT.md`](PROMPT.md) to configure your accounts, delivery address, and 
 ## Usage
 
 ```bash
-bun carlton [date]                   # Research tomorrow (or date), local only
-bun carlton send [date]              # Same but emails the briefing
+bun carlton send [date]          # Research tomorrow (or date), email the briefing
+bun carlton [date]               # Just research, no email
 ```
 
-Carlton spawns parallel Claude sessions to handle replies, so run it inside tmux to manage them:
+For the reply loop (polling for email replies and spawning responses), run inside tmux:
 
 ```bash
-# Run tmux before running Claude to help manage parallel Claude sessions
 tmux new -s carlton
 bun carlton serve
 ```
 
-Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
-
-### Testing
-
-Pragmatic TDD — clear types over high coverage, and one E2E test (`test/e2e.ts`) that exercises the full send → reply → response cycle. Ask Claude to run it from inside a tmux session:
+Or combine both:
 
 ```bash
-claude -p "run bun run test:e2e and tell me the results"   # Ask claude in tmux to run the e2e tests!
+bun carlton                      # send + serve in one session
 ```
 
-## Auth
+Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
 
-Two sets of credentials:
+## Commands
 
-- **Google OAuth client credentials** — a Desktop App client from a Google Cloud project with Calendar, Gmail, and Drive APIs enabled. Drop the JSON into `credentials/` and run `bun carlton credentials` to register it with all three CLI tools (`gccli`, `gmcli`, `gdcli`). Then `bun carlton accounts add <email>` authenticates an account across all three.
-- **Resend API key** — set `RESEND_API_KEY` in `.env`. Used only for outbound email delivery.
+| Command | Purpose |
+|---------|---------|
+| `bun carlton [date]` | Research a day (local only, no email) |
+| `bun carlton send [date]` | Research + email briefing |
+| `bun carlton serve` | Poll for email replies and respond (needs tmux) |
+| `bun carlton reply-to <subject> <file>` | Send a reply via Resend |
+| `bun carlton setup` | Verify auth status |
+| `bun carlton auth` | Setup instructions |
+| `bun carlton credentials` | Register OAuth JSON |
+| `bun carlton accounts add <email>` | Add a Google account |
+| `bun test` | Run tests |
 
-OAuth tokens are stored per-tool at `~/.gccli/`, `~/.gmcli/`, `~/.gdcli/`. These are the same CLIs you can use directly to query Google services (e.g. `bunx gmcli you@gmail.com search "query"`).
+## Authentication
+
+Two independent credential sets:
+
+1. **Google OAuth** — Desktop App client from a Google Cloud project (Calendar, Gmail, Drive APIs enabled). Drop the JSON into `credentials/`, run `bun carlton credentials` to register with all three tools (`gccli`, `gmcli`, `gdcli`), then `bun carlton accounts add <email>` to authenticate.
+   - Tokens stored at `~/.gccli/`, `~/.gmcli/`, `~/.gdcli/`
+   - These CLIs are also directly usable: `bunx gmcli you@gmail.com search "query"`
+
+2. **Resend API key** — set `RESEND_API_KEY` in `.env`. Used only for outbound email delivery, separate from Google auth.
 
 ## Security Model
 
 Two isolation boundaries:
 
-1. **Google access is read-only.** Only `search`, `list`, `get` methods are used — no `send`, `create`, `update`, `delete`. [`test/safety.test.ts`](test/safety.test.ts) scans all source files for forbidden method calls and fails the build if any are found.
+1. **Google access is read-only.** Only `search`, `list`, `get` methods are used — never `send`, `create`, `update`, `delete`. [`test/safety.test.ts`](test/safety.test.ts) scans all source files for forbidden method calls and fails the build if any are found.
 
-2. **Email delivery is deliberately separated from Google auth.** Carlton uses Resend (a third-party transactional email service) instead of Gmail's send API. This means even if an agent misbehaves, it cannot send email as the user or exfiltrate data through their Gmail account — the Google OAuth tokens have no send capability, and `email.ts` cannot import `google.ts` or access Google credentials (enforced by safety tests). The worst case is a bad email sent from Carlton's Resend domain, not from the user's identity.
+2. **Email delivery is separated from Google auth.** Carlton uses Resend instead of Gmail's send API. Even if an agent misbehaves, it cannot send email as you or exfiltrate data via Gmail — the Google OAuth tokens lack send capability, and `email.ts` cannot import `google.ts` or access Google credentials (enforced by safety tests). Worst case: a bad email from Carlton's Resend domain, not from your identity.
 
-## Open Questions
+## Testing
 
-The briefing pipeline works. The reply loop is where the hard problems are:
+Pragmatic TDD: clear types over coverage, plus one E2E test (`test/e2e.ts`) that exercises the full send → reply → response cycle.
 
-- **Permission bootstrapping.** Reply agents need to approve tool permissions interactively via tmux before they can go headless. How many sessions until the permission set stabilizes? Can we seed a good default set?
-- **Agent quality control.** A spawned Claude can research, write files, and send email. What guardrails prevent a bad response from going out? Currently: none beyond the safety tests on Google writes.
-- **Concurrency.** Multiple replies can arrive while an agent is working. They spawn in parallel tmux panes, but they're all reading/writing to the same `reports/` directory and `memory.txt`. No locking.
-- **Context window limits.** Thread history grows with each reply. At some point the context file exceeds what Claude can usefully process. No truncation strategy yet.
-- **Memory vs. code changes.** When a user says "always start with a joke", should that go in `memory.txt` (read by future agents) or in `src/report.ts` (changes the code)? Currently agents do both inconsistently.
+```bash
+claude -p "run bun run test:e2e and tell me the results"   # Ask Claude in tmux to run it
+```
+
+## Architecture
+
+| Module | Purpose |
+|--------|---------|
+| `src/index.ts` | CLI entry point and all commands |
+| `src/config.ts` | Path helpers and config |
+| `src/google.ts` | Wrappers for gccli, gmcli, gdcli |
+| `src/calendar.ts` | Multi-account event fetching + dedup |
+| `src/report.ts` | Report generation and file output |
+| `src/research.ts` | Parallel per-meeting research (spawns Claude agents) |
+| `src/curator.ts` | Curator agent context builder |
+| `src/reply.ts` | Reply thread handling |
+| `src/prompt.ts` | PROMPT.md parser |
+| `src/email.ts` | Resend email delivery (isolated from Google) |
 
 ## Folder Structure
 
@@ -87,28 +116,28 @@ The briefing pipeline works. The reply loop is where the hard problems are:
 carlton/
 ├── credentials/          # OAuth credentials (gitignored)
 ├── src/
-│   ├── index.ts          # CLI entry point and all commands
-│   ├── config.ts         # Path helpers
-│   ├── google.ts         # Service wrappers (gmail, calendar, drive)
-│   ├── calendar.ts       # Multi-account event fetching + dedup
-│   ├── report.ts         # Report generation + file output
-│   ├── research.ts       # Parallel per-meeting research via Claude agents
-│   ├── curator.ts        # Curator agent context builder + runner
-│   ├── reply.ts          # Reply thread handling
-│   ├── prompt.ts         # PROMPT.md parser
-│   └── email.ts          # Resend email delivery (isolated from Google)
-├── test/                 # Unit + E2E tests
-├── docs/                 # Architecture notes, RFCs, agent handoff docs
-├── reports/              # All output (gitignored)
-├── PROMPT.md             # User config (accounts, delivery, format)
-├── .env                  # RESEND_API_KEY (gitignored)
-├── CLAUDE.md             # Agent instructions
+│   ├── *.ts             # Implementation
+├── test/
+│   ├── *.test.ts        # Unit tests
+│   ├── e2e.ts           # Full integration test
+│   └── safety.test.ts   # Enforce read-only Google access
+├── docs/                # Architecture notes and RFCs
+├── reports/             # Output (gitignored)
+├── PROMPT.md            # User configuration
+├── CLAUDE.md            # Agent instructions
+├── .env                 # RESEND_API_KEY (gitignored)
 └── README.md
 ```
 
-## Docs
+## Further Reading
 
-- [Reply loop architecture](docs/prompt-email-reply-loop.md)
-- [Loops framework](docs/loops-framework.md) — how Carlton fits into a broader agent-human feedback model
-- [PROMPT.md](PROMPT.md) — user config
-- [CLAUDE.md](CLAUDE.md) — agent instructions
+- [`docs/loops-framework.md`](docs/loops-framework.md) — Conceptual model for agent-human feedback cycles
+- [`docs/prompt-email-reply-loop.md`](docs/prompt-email-reply-loop.md) — Reply loop architecture
+- [`PROMPT.md`](PROMPT.md) — User configuration (accounts, delivery, preferences)
+- [`CLAUDE.md`](CLAUDE.md) — Agent instructions and safety rules
+
+## Known Limitations
+
+- **Reply agent permissions.** Claude agents spawned to handle replies currently need interactive permission approval via tmux. Once the permission set stabilizes, this can go fully headless.
+- **Thread context growth.** Each reply adds to the thread history. No truncation strategy yet — at some point the context will exceed Claude's window.
+- **Concurrency.** Multiple parallel replies can write to `reports/` and `memory.txt` simultaneously. No locking mechanism.
