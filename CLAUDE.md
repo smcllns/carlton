@@ -67,7 +67,7 @@ Examples:
 ```
 [2026-02-07] preference: User wants attendee names, not email addresses, in report headers.
 [2026-02-07] gotcha: gccli requires Z suffix on datetime strings or returns Bad Request.
-[2026-02-07] process: Subscription calendars (birthdays, holidays) throw Bad Request on listEvents — skip silently.
+[2026-02-07] gotcha: Subscription calendars (birthdays, holidays) throw Bad Request on listEvents — log the error and continue with other calendars.
 ```
 
 @reports/memory.txt
