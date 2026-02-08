@@ -15,7 +15,7 @@ Replaced the one-Claude-per-reply design with a lock-based batch processing mode
 - `triggerProcessing()` checks lock, checks unprocessed, spawns ONE Claude (Sonnet)
 - `thread.md` is the canonical conversation record, inlined into Claude's prompt
 - `.processing` lock file prevents concurrent Claudes
-- `cmdReplyTo()` now accepts date arg, reads `.briefing-sent` JSON for threading headers
+- `cmdReplyTo()` now accepts date arg, reads `.last-reply-id` for threading headers
 - `sendBriefing()` sets `Message-ID: <carlton-{date}@carlton.local>`, returns `{resendId, messageId}`
 - `.briefing-sent` is now JSON instead of plain text
 - Curator model upgraded from haiku to sonnet
@@ -33,12 +33,12 @@ Replaced the one-Claude-per-reply design with a lock-based batch processing mode
 
 - `src/email.ts` — `sendBriefing()` now takes `date`, returns `{resendId, messageId}`, sets `Message-ID` header. `briefingMessageId()` exported. `sendReply()` only sets threading headers when `inReplyTo` is non-empty.
 - `src/reply.ts` — Removed `buildReplyContext()`, `buildThreadHistory()`. Added `maxReplyNumber()`, `maxResponseNumber()`, `hasUnprocessedReplies()`, `appendToThread()` (with mkdirSync for safety), `removeNewMarkers()`, `buildReplyPrompt()`. `replyFilePaths()` no longer returns `contextFile`. Renamed `nextResponseNumber()` → `nextReplyNumber()` (was misnamed — it numbers replies, not responses).
-- `src/index.ts` — Replaced `handleReply()` with `recordReply()` + `triggerProcessing()` + `spawnClaudeInTmux()`. `triggerProcessing()` accepts `opts.reportsDir` + `opts.spawnFn` for testability, cleans up lock on spawn error. `cmdSendBriefing()` creates thread.md. `cmdReplyTo()` takes optional date, reads `.briefing-sent` JSON (warns on old format), appends to thread.md, removes NEW markers. `cmdServe()` startup cleans stale locks and triggers for unprocessed dates.
+- `src/index.ts` — Replaced `handleReply()` with `recordReply()` + `triggerProcessing()` + `spawnClaudeInTmux()`. `recordReply()` extracts `Message-Id` header from Gmail reply, saves to `.last-reply-id`. `triggerProcessing()` accepts `opts.reportsDir` + `opts.spawnFn` for testability, cleans up lock on spawn error, skips dates without `thread.md`. `cmdSendBriefing()` creates thread.md. `cmdReplyTo()` takes optional date, reads `.last-reply-id` for threading, appends to thread.md, removes NEW markers. `cmdServe()` startup cleans stale locks and triggers for unprocessed dates, logs correct delivery email.
 - `src/curator.ts` — `--model haiku` → `--model sonnet`
 
 ## Tests
 
-88 tests across 8 files:
+89 tests across 8 files:
 - `test/reply.test.ts` — state detection, thread.md management (incl. parent dir creation), buildReplyPrompt
 - `test/serve.test.ts` — calls real `triggerProcessing()` with mock spawn + temp dirs. Lock behavior, lock cleanup on error, double-spawn prevention, batch flow.
 - `test/thread.test.ts` — append ordering, special characters, NEW marker lifecycle, concurrent appends

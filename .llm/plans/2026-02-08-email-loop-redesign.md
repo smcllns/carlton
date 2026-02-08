@@ -223,8 +223,9 @@ Respond to all replies marked NEW above.
 - [x] 2. Upgrade curator model (`curator.ts`) — one line
 - [x] 3. Simplify `reply.ts` + thread.md helpers — standalone
 - [x] 4. Redesign serve loop (`index.ts`) — depends on 1, 3
-- [x] 5. Write and pass ALL tests below — depends on 4 (88 tests passing)
-- [ ] 6. Mark PR ready for review
+- [x] 5. Write and pass ALL tests below — depends on 4 (89 tests passing)
+- [ ] 6. Manual Gmail threading test — verify response threads correctly
+- [ ] 7. Mark PR ready for review
 
 ---
 
@@ -301,8 +302,8 @@ Update the existing E2E test to exercise the full new loop:
 
 ### Checklist Before Marking PR Ready
 
-- [x] All unit tests pass (`bun test`) — 88 tests passing
-- [ ] E2E test passes in tmux (`tmux new -s carlton-test 'bun test/e2e.ts'`)
-- [x] Safety tests still pass (`bun test test/safety.test.ts`) — email.ts still doesn't import google.ts
-- [ ] Manual test: send a real briefing to the delivery email, reply to it, verify response arrives threaded in Gmail
+- [x] All unit tests pass (`bun test`) — 89 tests passing
+- [x] E2E test passes in tmux (`bun test/e2e.ts`) — 10/10 steps
+- [x] Safety tests still pass (`bun test test/safety.test.ts`)
+- [ ] Manual test: send briefing, reply in Gmail, verify response threads correctly
 - [x] No new TypeScript errors (pre-existing .ts extension warnings only)
