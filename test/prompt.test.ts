@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { loadPrompt } from "./prompt.ts";
+import { loadPrompt } from "../src/prompt.ts";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";

@@ -7,7 +7,7 @@ import * as path from "path";
  * Carlton is READ-ONLY. These tests catch accidental use of dangerous APIs.
  */
 
-const SRC_DIR = path.join(import.meta.dir);
+const SRC_DIR = path.join(import.meta.dir, "..", "src");
 
 // Methods that must NEVER appear in Carlton source (excluding test files)
 const FORBIDDEN_METHODS = [

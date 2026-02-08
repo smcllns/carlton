@@ -7,7 +7,7 @@ import {
   buildReplyContext,
   writeReplyFile,
   replyFilePaths,
-} from "./reply.ts";
+} from "../src/reply.ts";
 
 const TEST_DIR = join(import.meta.dir, "..", ".test-replies");
 

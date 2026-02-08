@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   formatBasicReport,
   createReportFiles,
-} from "./report.ts";
-import type { CalendarEvent } from "./calendar.ts";
+} from "../src/report.ts";
+import type { CalendarEvent } from "../src/calendar.ts";
 import * as fs from "fs";
 import * as path from "path";
 

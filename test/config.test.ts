@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getReportsDir, getMemoryFile } from "./config.ts";
+import { getReportsDir, getMemoryFile } from "../src/config.ts";
 
 describe("config", () => {
   test("getReportsDir returns a path ending in reports", () => {
