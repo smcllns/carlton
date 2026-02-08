@@ -92,7 +92,9 @@ Two isolation boundaries:
 Pragmatic TDD: clear types over coverage, plus one E2E test (`test/e2e.ts`) that exercises the full send → reply → response cycle.
 
 ```bash
-claude -p "run bun run test:e2e and tell me the results"   # Ask Claude in tmux to run it
+bun test                                                    # Unit tests
+bun run test:e2e                                            # E2E in a tmux split pane
+claude -p "run bun run test:e2e and tell me the results"    # ...or let Claude run it and read the results
 ```
 
 ## Architecture
