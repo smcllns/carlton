@@ -23,8 +23,8 @@ bun carlton credentials                       # Register your OAuth JSON from cr
 bun carlton accounts add you@gmail.com        # Opens browser for OAuth
 bun carlton setup                             # Verify everything works
 
-# Email delivery
-cp .env.example .env                          # Add your RESEND_API_KEY
+# Set up your .env file with Resend key
+cp .env.example .env
 ```
 
 Edit [`PROMPT.md`](PROMPT.md) to configure your accounts, delivery address, and briefing preferences. Run `bun carlton auth` for detailed setup instructions.
