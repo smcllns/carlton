@@ -147,3 +147,4 @@ The briefing pipeline works. The reply loop is where the hard problems are:
 - **Concurrency.** Multiple replies can arrive while an agent is working. They spawn in parallel tmux panes, but they're all reading/writing to the same `reports/` directory and `memory.txt`. No locking.
 - **Context window limits.** Thread history grows with each reply. At some point the context file exceeds what Claude can usefully process. No truncation strategy yet.
 - **Memory vs. code changes.** When a user says "always start with a joke", should that go in `memory.txt` (read by future agents) or in `src/report.ts` (changes the code)? Currently agents do both inconsistently.
+- **One session per day.** Right now each reply spawns a new stateless Claude. Ideally there's one long-running Claude session per day (`claude --continue`) that handles all replies with full context — no thread history stitching, no parallel agent sprawl. The current architecture over-spawns.
