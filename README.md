@@ -104,8 +104,9 @@ carlton/
 │   ├── curator.ts        # Curator agent context builder + runner
 │   ├── reply.ts          # Reply thread handling
 │   ├── prompt.ts         # PROMPT.md parser
-│   ├── email.ts          # Resend email delivery (isolated from Google)
-│   └── *.test.ts         # Tests
+│   └── email.ts          # Resend email delivery (isolated from Google)
+├── test/                 # Unit + E2E tests
+├── docs/                 # Architecture notes, RFCs, agent handoff docs
 ├── reports/              # All output (gitignored)
 ├── PROMPT.md             # User config (accounts, delivery, format)
 ├── .env                  # RESEND_API_KEY (gitignored)
