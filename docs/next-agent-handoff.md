@@ -9,7 +9,7 @@
 
 ### 1. Each Claude session is stateless — no thread context
 
-When Carlton spawns Claude for a reply, it only passes the SINGLE latest reply in `.carlton-reply.md`. Claude has no idea what the previous exchanges in the thread were. So when Sam says "This is great, always start with a TLDR", Claude doesn't know what "this" refers to.
+When Carlton spawns Claude for a reply, it only passes the SINGLE latest reply in `.carlton-reply.md`. Claude has no idea what the previous exchanges in the thread were. So when the user says "This is great, always start with a TLDR", Claude doesn't know what "this" refers to.
 
 **Fix:** Include the full thread history in the context file. The replies are already saved in `reports/<date>/responses/` as numbered pairs (NN-reply.md, NN-response.md). The context file should include all previous exchanges so Claude has full conversational context.
 
