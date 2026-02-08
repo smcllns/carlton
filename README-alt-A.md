@@ -67,8 +67,7 @@ bun carlton serve
 Pragmatic TDD — clear types over high coverage, and one E2E test (`test/e2e.ts`) that exercises the full send → reply → response cycle. Ask Claude to run it from inside a tmux session:
 
 ```bash
-bun test                             # Unit tests
-claude -p "run bun run test:e2e and tell me the results"   # E2E — splits a tmux pane, Claude reads the output
+claude -p "run bun run test:e2e and tell me the results"   # Yes, the AI runs its own tests
 ```
 
 ## Security Model
