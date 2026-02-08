@@ -9,7 +9,7 @@
  *   bun carlton send 2026-02-10         # Email briefing for specific date
  *   bun carlton serve                   # Poll for replies, spawn Claude in tmux windows (requires tmux)
  *   bun carlton send-briefing 2026-02-10 # Send reports/<date>/briefing.md via email
- *   bun carlton reply-to <subj> <file>  # Send a threaded reply via Resend
+ *   bun carlton reply-to <subj> <file> <date> # Send a threaded reply via Resend
  *   bun carlton reset                   # Wipe reports, memory, processed IDs (keeps auth)
  *   bun carlton setup                   # Check auth status
  *   bun carlton auth                    # Show setup instructions
@@ -28,13 +28,15 @@ import { loadPrompt, type PromptConfig } from "./prompt.ts";
 import { sendBriefing, sendReply } from "./email.ts";
 import { getGmail } from "./google.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync, statSync } from "fs";
 import {
   nextResponseNumber,
-  buildThreadHistory,
-  buildReplyContext,
+  hasUnprocessedReplies,
   writeReplyFile,
   replyFilePaths,
+  appendToThread,
+  removeNewMarkers,
+  buildReplyPrompt,
 } from "./reply.ts";
 import { join } from "path";
 import { createHash } from "crypto";
@@ -309,8 +311,13 @@ async function cmdSend(date: string) {
   }
 
   if (existsSync(sentMarker)) {
-    const messageId = readFileSync(sentMarker, "utf8").trim();
-    console.log(`✅ Briefing sent! (${messageId})`);
+    const markerContent = readFileSync(sentMarker, "utf8").trim();
+    try {
+      const info = JSON.parse(markerContent);
+      console.log(`✅ Briefing sent! (${info.resendId})`);
+    } catch {
+      console.log(`✅ Briefing sent! (${markerContent})`);
+    }
   } else {
     console.error("⚠️  Curator finished but briefing wasn't sent. Check reports/ for details.");
   }
@@ -332,10 +339,18 @@ async function cmdSendBriefing(date: string) {
 
   const markdown = readFileSync(briefingFile, "utf8");
   const subject = `${date} Carlton Briefing Notes`;
-  const messageId = await sendBriefing(prompt.delivery.email, subject, markdown);
-  writeFileSync(sentMarker, messageId, "utf8");
-  console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
-  console.log(`   Message ID: ${messageId}`);
+  const deliveryEmail = process.env.CARLTON_DELIVERY_EMAIL || prompt.delivery.email;
+  const result = await sendBriefing(deliveryEmail, subject, markdown, date);
+  writeFileSync(sentMarker, JSON.stringify(result), "utf8");
+  console.log(`✅ Briefing sent to ${deliveryEmail}`);
+  console.log(`   Message ID: ${result.messageId}`);
+
+  // Create thread.md with briefing content
+  const threadFile = join(getReportsDir(), date, "thread.md");
+  const header = `# Carlton Thread — ${date}\n`;
+  const briefingSection = `## Briefing Sent (${new Date().toISOString()})\n\n${markdown}\n`;
+  writeFileSync(threadFile, header + "\n" + briefingSection, "utf8");
+  console.log(`   Thread file: reports/${date}/thread.md`);
 }
 
 
@@ -376,9 +391,8 @@ function parseDateFromSubject(subject: string): string | null {
   return match ? match[1] : null;
 }
 
-async function handleReply(account: string, threadId: string, msg: any) {
+async function recordReply(account: string, threadId: string, msg: any) {
   const gmail = getGmail();
-  const projectRoot = getProjectRoot();
 
   let replyBody = msg.snippet || "";
   try {
@@ -401,22 +415,51 @@ async function handleReply(account: string, threadId: string, msg: any) {
 
   writeReplyFile(paths.replyFile, num, msg.from, msgDate, msg.subject, replyBody);
 
-  const threadHistory = buildThreadHistory(responsesDir, num);
-  const context = buildReplyContext(
-    { from: msg.from, subject: msg.subject, date: msgDate, account, threadId, messageId: msg.id, briefingDate: date },
-    replyBody,
-    threadHistory,
-    paths,
-  );
-  writeFileSync(paths.contextFile, context, "utf8");
+  // Append to thread.md
+  const threadFile = join(getReportsDir(), date, "thread.md");
+  appendToThread(threadFile, `NEW Reply #${num} (${msgDate} from ${msg.from})`, replyBody);
 
-  const windowName = `reply-${String(num).padStart(2, "0")}`;
-  const contextRelative = `reports/${date}/responses/${String(num).padStart(2, "0")}-context.md`;
-  const claudeCmd = `claude "A user replied to a Carlton briefing email. Read ${contextRelative} for the full context and instructions."`;
+  return date;
+}
+
+const STALE_LOCK_MS = 10 * 60 * 1000; // 10 minutes
+
+function cleanStaleLocks(date: string) {
+  const lockFile = join(getReportsDir(), date, "responses", ".processing");
+  if (!existsSync(lockFile)) return;
+  const mtime = statSync(lockFile).mtimeMs;
+  if (Date.now() - mtime > STALE_LOCK_MS) {
+    console.log(`  Removing stale lock for ${date} (age: ${Math.round((Date.now() - mtime) / 60000)}min)`);
+    unlinkSync(lockFile);
+  }
+}
+
+export function triggerProcessing(date: string, spawnFn?: (date: string) => void) {
+  const responsesDir = join(getReportsDir(), date, "responses");
+  const lockFile = join(responsesDir, ".processing");
+
+  if (existsSync(lockFile)) return;
+  if (!hasUnprocessedReplies(responsesDir)) return;
+
+  mkdirSync(responsesDir, { recursive: true });
+  writeFileSync(lockFile, new Date().toISOString());
+  const spawn = spawnFn || spawnClaudeInTmux;
+  spawn(date);
+}
+
+function spawnClaudeInTmux(date: string) {
+  const projectRoot = getProjectRoot();
+  const prompt = buildReplyPrompt(date);
+  const promptFile = join(getReportsDir(), date, "responses", ".reply-prompt.md");
+  writeFileSync(promptFile, prompt, "utf8");
+
+  const allowedTools = "Read(reports/**),Write(reports/**),Bash(bun carlton reply-to *),Bash(bunx gmcli *),Bash(bunx gccli *),Bash(bunx gdcli *),Bash(rm reports/*/responses/.processing)";
+  const windowName = `reply-${date}`;
+  const claudeCmd = `claude -p --model sonnet --allowedTools "${allowedTools}" < reports/${date}/responses/.reply-prompt.md`;
   console.log(`🤖 Spawning Claude in tmux window '${windowName}'`);
   Bun.spawn(
-    ["tmux", "split-window", "-h", "-c", projectRoot, claudeCmd],
-    { stdio: ["ignore", "ignore", "ignore"] }
+    ["tmux", "new-window", "-d", "-n", windowName, "-c", projectRoot, claudeCmd],
+    { stdio: ["ignore", "ignore", "ignore"] },
   );
 }
 
@@ -463,6 +506,17 @@ async function cmdServe() {
   persistIds();
   console.log(`  Seeded ${processedIds.size} existing messages.\n`);
 
+  // On startup: clean stale locks and trigger for any dates with unprocessed replies
+  const reportsDir = getReportsDir();
+  if (existsSync(reportsDir)) {
+    for (const dir of readdirSync(reportsDir)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dir)) {
+        cleanStaleLocks(dir);
+        triggerProcessing(dir);
+      }
+    }
+  }
+
   const poll = async () => {
     const pending: { account: string; threadId: string; msg: any }[] = [];
 
@@ -500,12 +554,21 @@ async function cmdServe() {
       return dateA - dateB;
     });
 
+    const datesWithNewReplies = new Set<string>();
+
     for (const { account, threadId, msg } of pending) {
       console.log(`📩 Reply from ${msg.from}: ${msg.subject}`);
       console.log(`   "${(msg.snippet || "").slice(0, 100)}"`);
       persistIds();
 
-      await handleReply(account, threadId, msg);
+      const date = await recordReply(account, threadId, msg);
+      datesWithNewReplies.add(date);
+    }
+
+    // After recording all replies, trigger processing per date
+    for (const date of datesWithNewReplies) {
+      cleanStaleLocks(date);
+      triggerProcessing(date);
     }
   };
 
@@ -515,13 +578,33 @@ async function cmdServe() {
   }
 }
 
-async function cmdReplyTo(subject: string, bodyFile: string) {
+async function cmdReplyTo(subject: string, bodyFile: string, date?: string) {
   const prompt = loadPrompt();
   const body = readFileSync(bodyFile, "utf8");
 
-  const messageId = await sendReply(prompt.delivery.email, subject, body, "");
-  console.log(`✅ Reply sent to ${prompt.delivery.email}`);
+  // Read .briefing-sent for threading
+  let inReplyTo = "";
+  if (date) {
+    const sentMarker = join(getReportsDir(), date, ".briefing-sent");
+    if (existsSync(sentMarker)) {
+      try {
+        const info = JSON.parse(readFileSync(sentMarker, "utf8"));
+        inReplyTo = info.messageId || "";
+      } catch {}
+    }
+  }
+
+  const deliveryEmail = process.env.CARLTON_DELIVERY_EMAIL || prompt.delivery.email;
+  const messageId = await sendReply(deliveryEmail, subject, body, inReplyTo);
+  console.log(`✅ Reply sent to ${deliveryEmail}`);
   console.log(`   Message ID: ${messageId}`);
+
+  // Append response to thread.md + remove NEW markers
+  if (date) {
+    const threadFile = join(getReportsDir(), date, "thread.md");
+    appendToThread(threadFile, "Response", body);
+    removeNewMarkers(threadFile);
+  }
 }
 
 function formatTimeShort(iso: string): string {
@@ -613,17 +696,18 @@ if (!command) {
 } else if (command === "reply-to") {
   const subject = args[1];
   const bodyFile = args[2];
+  const date = args[3];
   if (!subject || !bodyFile) {
-    console.error("Usage: bun carlton reply-to <subject> <body-file.md>");
+    console.error("Usage: bun carlton reply-to <subject> <body-file.md> [date]");
     process.exit(1);
   }
-  await cmdReplyTo(subject, bodyFile);
+  await cmdReplyTo(subject, bodyFile, date);
 } else if (command === "reset") {
   cmdReset();
 } else if (isValidDate(command)) {
   await cmdPrep(command);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|reply-to <subject> <file>|reset]");
+  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|reply-to <subject> <file> [date]|reset]");
   process.exit(1);
 }
