@@ -18,26 +18,31 @@ Read-only. Carlton never writes to your Google services. Email delivery is via [
 git clone https://github.com/smcllns/carlton.git && cd carlton
 bun install
 
-bun carlton auth                              # Setup instructions
-# Drop your Google Cloud OAuth JSON into credentials/
-bun carlton credentials                       # Register with all Google tools
+# Google OAuth — drops credentials and authenticates each account
+bun carlton credentials                       # Register your OAuth JSON from credentials/
 bun carlton accounts add you@gmail.com        # Opens browser for OAuth
 bun carlton setup                             # Verify everything works
 
+# Email delivery
 cp .env.example .env                          # Add your RESEND_API_KEY
 ```
 
-Edit [`PROMPT.md`](PROMPT.md) to configure your accounts, delivery address, and briefing preferences.
+Edit [`PROMPT.md`](PROMPT.md) to configure your accounts, delivery address, and briefing preferences. Run `bun carlton auth` for detailed setup instructions.
 
 ## Usage
 
 ```bash
-tmux new -s carlton 'bun carlton'     # Research + email + reply handling
-bun carlton send                      # Just research and email (no tmux needed)
-bun carlton 2026-02-10                # Specific date, local only, no email
+bun carlton send [date]              # Research tomorrow (or date), email briefing
+bun carlton [date]                   # Same but local only, no email
 ```
 
-Output goes to `reports/YYYY-MM-DD/`.
+To handle reply emails, Carlton needs tmux — it spawns a Claude session per reply in its own tmux window so you can see what it's doing and approve permissions as needed. Once you've approved the common ones, it becomes hands-off.
+
+```bash
+tmux new -s carlton 'bun carlton'    # send + poll for replies
+```
+
+Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
 
 ## How it works
 
@@ -59,7 +64,9 @@ Email delivery uses Resend, which is completely separate from Google auth. `emai
 
 Data flow: Google (read) → Carlton (process) → Resend (send to user)
 
-## All commands
+## Reference
+
+Command reference — most of these are used by Carlton's own agents, not by you directly.
 
 | Command | What it does |
 |---------|-------------|
