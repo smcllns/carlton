@@ -55,7 +55,15 @@ Or combine both:
 bun carlton                      # send + serve in one session
 ```
 
-Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
+Output goes to `reports/YYYY-MM-DD/`.
+
+To iterate during development:
+
+```bash
+bun carlton send --test          # Full pipeline again (clears the double-send guard)
+bun carlton send-briefing        # Re-send the briefing email (skip research)
+bun carlton 2026-02-09           # Research only, no email
+```
 
 ## Commands
 
@@ -63,8 +71,11 @@ Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
 |---------|---------|
 | `bun carlton [date]` | Research a day (local only, no email) |
 | `bun carlton send [date]` | Research + email briefing |
+| `bun carlton send --test` | Same, but clears the double-send guard first |
+| `bun carlton send-briefing [date]` | Re-send existing briefing (skip research) |
 | `bun carlton serve` | Poll for email replies and respond (needs tmux) |
 | `bun carlton reply-to <subject> <file>` | Send a reply via Resend |
+| `bun carlton reset` | Wipe reports, memory, processed IDs (keeps auth) |
 | `bun carlton setup` | Verify auth status |
 | `bun carlton auth` | Setup instructions |
 | `bun carlton credentials` | Register OAuth JSON |
