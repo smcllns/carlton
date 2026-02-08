@@ -1,20 +1,22 @@
 # Carlton
 
-Meeting prep from your calendar, researched in parallel, delivered by email. Reply to ask follow-ups.
+An agent who manages subagents working across your calendar, docs and inbox, communicating by email. 
 
-Carlton fetches your calendar across multiple Google accounts, spawns Claude agents to research each meeting (Gmail, Calendar, Drive), compiles a briefing, and emails it. Reply to the briefing and Carlton picks up the reply, researches your question, and responds in-thread.
+Carlton fetches your calendar across multiple Google accounts, manages multiple parallel Claude agents to research different areas (across Gmail, Calendar, Drive), compiles and emails briefing notes to you. 
 
-**Read-only and isolated.** Carlton never writes to Google services. Email delivery uses [Resend](https://resend.com) (separate auth) so it cannot send email as you, only to you.
+**Reply to ask follow-ups.** You can reply to the briefing and Carlton will pick it up, research your question, and respond in-thread with a research answer based on your data sources.
+
+**Read-only and isolated.** Carlton uses [Resend](https://resend.com) for email message delivery (sending you email reports and research follow-ups) which is a separate auth provider and allows us to be restrictive on Google side permissions. In other words, Carlton can send email to you, not as you.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh)
-- [tmux](https://github.com/tmux/tmux) — for the reply handler (`serve`)
+- [Bun](https://bun.sh) - runtime, build system, package manager
+- [tmux](https://github.com/tmux/tmux) — for managing multiple dynamic claude code instances (`serve`)
   - macOS: `brew install tmux`
   - Linux: `sudo apt install tmux`
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
-- Google Cloud project with Calendar, Gmail, and Drive APIs enabled
-- [Resend](https://resend.com) API key
+- Google Cloud OAuth credentials - for Calendar, Gmail, and Drive API auth
+- [Resend](https://resend.com) API key - for Carlton to be able to email you
 
 ## Setup
 
