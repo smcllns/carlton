@@ -77,7 +77,7 @@ Two independent credential sets:
    - Tokens stored at `~/.gccli/`, `~/.gmcli/`, `~/.gdcli/`
    - These CLIs are also directly usable: `bunx gmcli you@gmail.com search "query"`
 
-2. **Resend API key** — set `RESEND_API_KEY` in `.env`. Used only for outbound email delivery, separate from Google auth.
+2. **Resend API key** — set `RESEND_API_KEY` in `.env`. For sending email from Carlton to you, which you can then reply to and Carlton picks up via Gmail. Separate from Google auth.
 
 ## Security Model
 
