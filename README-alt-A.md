@@ -72,7 +72,13 @@ bun test                             # Unit tests
 
 There's one E2E test (`test/e2e.ts`) that exercises the full cycle: create report → send briefing → double-send guard → simulate reply → Claude response → second reply with thread history → cleanup. It's the only E2E test Carlton needs.
 
-The best way to run it is to ask Claude to run `bun run test:e2e` from inside a tmux session. This splits a pane to the right with the test output, and Claude can read the results back from the adjacent pane to tell you what happened.
+The best way to run it is to ask Claude to run it from inside a tmux session:
+
+```bash
+bun run test:e2e
+```
+
+This splits a pane to the right with the test output, and Claude can read the results back from the adjacent pane to tell you what happened.
 
 ## Security Model
 
