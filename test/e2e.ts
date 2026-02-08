@@ -24,6 +24,7 @@ import {
   appendToThread,
   removeNewMarkers,
 } from "../src/reply.ts";
+import { triggerProcessing } from "../src/index.ts";
 
 const TEST_DATE = "2099-01-01";
 const PROJECT_ROOT = getProjectRoot();
@@ -233,13 +234,12 @@ async function step5_waitForResponse1() {
   assert(content.length > 10, `Response too short (${content.length} chars)`);
 
   // Verify thread.md was updated (response appended, NEW marker removed)
-  // Note: Claude calls `bun carlton reply-to` which does this
+  // Claude must call `bun carlton reply-to <subject> <file> <date>` which does this
   const threadContent = readFileSync(THREAD_FILE, "utf8");
-  const hasResponse = threadContent.includes("## Response");
-  const hasNew = threadContent.includes("## NEW Reply");
+  assert(threadContent.includes("## Response"), "thread.md missing '## Response' — reply-to not called or missing date arg");
+  assert(!threadContent.includes("## NEW Reply"), "thread.md still has NEW markers — removeNewMarkers not called");
 
-  record("Claude response #1", true,
-    `${content.length} chars. thread.md response: ${hasResponse}, NEW removed: ${!hasNew}`);
+  record("Claude response #1", true, `${content.length} chars, thread.md updated`);
 }
 
 async function step6_simulateReplies2and3() {
@@ -267,7 +267,7 @@ async function step6_simulateReplies2and3() {
 
   const threadContent = readFileSync(THREAD_FILE, "utf8");
   const newCount = (threadContent.match(/## NEW Reply/g) || []).length;
-
+  assert(newCount >= 2, `Expected at least 2 NEW markers in thread.md, got ${newCount}`);
   assert(hasUnprocessedReplies(RESPONSES_DIR), "Should have unprocessed replies");
 
   // Trigger processing — only one Claude should spawn
@@ -319,9 +319,9 @@ async function step7_waitForBatchResponse() {
 
   const threadContent = readFileSync(THREAD_FILE, "utf8");
   const remainingNew = (threadContent.match(/## NEW Reply/g) || []).length;
+  assert(remainingNew === 0, `${remainingNew} NEW markers still remain after batch response`);
 
-  record("Batch response", true,
-    `${content.length} chars, ${remainingNew} remaining NEW markers`);
+  record("Batch response", true, `${content.length} chars, all NEW markers removed`);
 }
 
 async function step8_lockPreventsSpawn() {
@@ -337,18 +337,28 @@ async function step8_lockPreventsSpawn() {
   // Manually create lock
   writeFileSync(lockFile, new Date().toISOString());
 
-  // With lock present, triggerProcessing would skip
-  assert(existsSync(lockFile), "Lock should exist");
-  assert(hasUnprocessedReplies(RESPONSES_DIR), "Should have unprocessed replies");
+  // Call real triggerProcessing — should skip because lock exists
+  let spawnedWhileLocked = false;
+  triggerProcessing(TEST_DATE, {
+    spawnFn: () => { spawnedWhileLocked = true; },
+    reportsDir: REPORTS_DIR,
+  });
+  assert(!spawnedWhileLocked, "triggerProcessing spawned despite lock existing");
 
-  // Remove lock
+  // Remove lock, call again — should spawn
   unlinkSync(lockFile);
-  assert(!existsSync(lockFile), "Lock should be removed");
+  let spawnedAfterUnlock = false;
+  triggerProcessing(TEST_DATE, {
+    spawnFn: () => { spawnedAfterUnlock = true; },
+    reportsDir: REPORTS_DIR,
+  });
+  assert(spawnedAfterUnlock, "triggerProcessing didn't spawn after lock removed");
 
-  // Clean up the test reply
+  // Clean up
+  if (existsSync(lockFile)) unlinkSync(lockFile);
   unlinkSync(paths.replyFile);
 
-  record("Lock prevents concurrent spawn", true, "Lock blocks trigger, removal unblocks");
+  record("Lock prevents concurrent spawn", true, "triggerProcessing respects lock, spawns after removal");
 }
 
 async function step9_staleLockRecovery() {
