@@ -2,11 +2,15 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
 import {
+  maxReplyNumber,
+  maxResponseNumber,
+  hasUnprocessedReplies,
   nextResponseNumber,
-  buildThreadHistory,
-  buildReplyContext,
   writeReplyFile,
   replyFilePaths,
+  appendToThread,
+  removeNewMarkers,
+  buildReplyPrompt,
 } from "../src/reply.ts";
 
 const TEST_DIR = join(import.meta.dir, "..", ".test-replies");
@@ -24,7 +28,6 @@ describe("replyFilePaths", () => {
     const paths = replyFilePaths(join(TEST_DIR, "responses"), 3);
     expect(paths.replyFile).toContain("responses/03-reply.md");
     expect(paths.responseFile).toContain("responses/03-response.md");
-    expect(paths.contextFile).toContain("responses/03-context.md");
   });
 
   test("zero-pads single digit numbers", () => {
@@ -38,28 +41,105 @@ describe("replyFilePaths", () => {
   });
 });
 
+describe("maxReplyNumber", () => {
+  test("returns 0 for empty directory", () => {
+    expect(maxReplyNumber(TEST_DIR)).toBe(0);
+  });
+
+  test("returns 0 for nonexistent directory", () => {
+    expect(maxReplyNumber(join(TEST_DIR, "nope"))).toBe(0);
+  });
+
+  test("returns 1 for one reply", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply 1");
+    expect(maxReplyNumber(TEST_DIR)).toBe(1);
+  });
+
+  test("handles gaps in numbering (01, 03) → 3", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply 1");
+    writeFileSync(join(TEST_DIR, "03-reply.md"), "reply 3");
+    expect(maxReplyNumber(TEST_DIR)).toBe(3);
+  });
+
+  test("ignores response files", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply");
+    writeFileSync(join(TEST_DIR, "01-response.md"), "response");
+    expect(maxReplyNumber(TEST_DIR)).toBe(1);
+  });
+});
+
+describe("maxResponseNumber", () => {
+  test("returns 0 for empty directory", () => {
+    expect(maxResponseNumber(TEST_DIR)).toBe(0);
+  });
+
+  test("returns 0 for nonexistent directory", () => {
+    expect(maxResponseNumber(join(TEST_DIR, "nope"))).toBe(0);
+  });
+
+  test("returns 1 for one response", () => {
+    writeFileSync(join(TEST_DIR, "01-response.md"), "response 1");
+    expect(maxResponseNumber(TEST_DIR)).toBe(1);
+  });
+
+  test("handles gaps correctly", () => {
+    writeFileSync(join(TEST_DIR, "01-response.md"), "response 1");
+    writeFileSync(join(TEST_DIR, "03-response.md"), "response 3");
+    expect(maxResponseNumber(TEST_DIR)).toBe(3);
+  });
+
+  test("ignores reply files", () => {
+    writeFileSync(join(TEST_DIR, "02-reply.md"), "reply");
+    writeFileSync(join(TEST_DIR, "02-response.md"), "response");
+    expect(maxResponseNumber(TEST_DIR)).toBe(2);
+  });
+});
+
+describe("hasUnprocessedReplies", () => {
+  test("returns false for empty directory", () => {
+    expect(hasUnprocessedReplies(TEST_DIR)).toBe(false);
+  });
+
+  test("returns false for nonexistent directory", () => {
+    expect(hasUnprocessedReplies(join(TEST_DIR, "nope"))).toBe(false);
+  });
+
+  test("returns true when replies exist but no responses", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply");
+    expect(hasUnprocessedReplies(TEST_DIR)).toBe(true);
+  });
+
+  test("returns false when all replies have responses", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply");
+    writeFileSync(join(TEST_DIR, "01-response.md"), "response");
+    expect(hasUnprocessedReplies(TEST_DIR)).toBe(false);
+  });
+
+  test("returns true when new reply arrives after last response", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply 1");
+    writeFileSync(join(TEST_DIR, "01-response.md"), "response 1");
+    writeFileSync(join(TEST_DIR, "02-reply.md"), "reply 2");
+    expect(hasUnprocessedReplies(TEST_DIR)).toBe(true);
+  });
+
+  test("handles batch response (response numbered by highest reply)", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply 1");
+    writeFileSync(join(TEST_DIR, "02-reply.md"), "reply 2");
+    writeFileSync(join(TEST_DIR, "03-reply.md"), "reply 3");
+    writeFileSync(join(TEST_DIR, "03-response.md"), "batch response");
+    expect(hasUnprocessedReplies(TEST_DIR)).toBe(false);
+  });
+});
+
 describe("nextResponseNumber", () => {
   test("returns 1 for empty directory", () => {
     expect(nextResponseNumber(TEST_DIR)).toBe(1);
   });
 
-  test("returns 1 for nonexistent directory", () => {
-    expect(nextResponseNumber(join(TEST_DIR, "nope"))).toBe(1);
-  });
-
-  test("increments based on existing reply files", () => {
-    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply 1");
-    expect(nextResponseNumber(TEST_DIR)).toBe(2);
-
-    writeFileSync(join(TEST_DIR, "02-reply.md"), "reply 2");
-    expect(nextResponseNumber(TEST_DIR)).toBe(3);
-  });
-
-  test("ignores response and context files in count", () => {
+  test("returns max reply + 1", () => {
     writeFileSync(join(TEST_DIR, "01-reply.md"), "reply");
-    writeFileSync(join(TEST_DIR, "01-response.md"), "response");
-    writeFileSync(join(TEST_DIR, "01-context.md"), "context");
-    expect(nextResponseNumber(TEST_DIR)).toBe(2);
+    writeFileSync(join(TEST_DIR, "02-reply.md"), "reply");
+    expect(nextResponseNumber(TEST_DIR)).toBe(3);
   });
 });
 
@@ -76,139 +156,115 @@ describe("writeReplyFile", () => {
   });
 });
 
-describe("buildThreadHistory", () => {
-  test("returns empty string when no previous exchanges", () => {
-    expect(buildThreadHistory(TEST_DIR, 1)).toBe("");
+describe("appendToThread", () => {
+  test("creates file if missing", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    appendToThread(threadFile, "Reply #1", "Hello");
+    expect(existsSync(threadFile)).toBe(true);
+    const content = readFileSync(threadFile, "utf8");
+    expect(content).toContain("## Reply #1");
+    expect(content).toContain("Hello");
   });
 
-  test("returns empty string for nonexistent directory", () => {
-    expect(buildThreadHistory(join(TEST_DIR, "nope"), 1)).toBe("");
+  test("appends to existing file", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    writeFileSync(threadFile, "# Thread\n\nBriefing content\n");
+    appendToThread(threadFile, "Reply #1", "First reply");
+    appendToThread(threadFile, "Response", "First response");
+    const content = readFileSync(threadFile, "utf8");
+    expect(content).toContain("# Thread");
+    expect(content).toContain("## Reply #1");
+    expect(content).toContain("First reply");
+    expect(content).toContain("## Response");
+    expect(content).toContain("First response");
   });
 
-  test("includes previous reply and response as exchange", () => {
-    writeFileSync(join(TEST_DIR, "01-reply.md"), "Can you add shamrocks?");
-    writeFileSync(join(TEST_DIR, "01-response.md"), "Sure, shamrocks added!");
-
-    const history = buildThreadHistory(TEST_DIR, 2);
-    expect(history).toContain("## Previous Exchanges");
-    expect(history).toContain("### Exchange #1");
-    expect(history).toContain("Can you add shamrocks?");
-    expect(history).toContain("Sure, shamrocks added!");
+  test("maintains chronological ordering", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    writeFileSync(threadFile, "# Thread\n");
+    appendToThread(threadFile, "Reply #1", "first");
+    appendToThread(threadFile, "Response", "response to first");
+    appendToThread(threadFile, "Reply #2", "second");
+    const content = readFileSync(threadFile, "utf8");
+    const idx1 = content.indexOf("Reply #1");
+    const idxR = content.indexOf("Response");
+    const idx2 = content.indexOf("Reply #2");
+    expect(idx1).toBeLessThan(idxR);
+    expect(idxR).toBeLessThan(idx2);
   });
 
-  test("excludes the current exchange", () => {
-    writeFileSync(join(TEST_DIR, "01-reply.md"), "first reply");
-    writeFileSync(join(TEST_DIR, "01-response.md"), "first response");
-    writeFileSync(join(TEST_DIR, "02-reply.md"), "second reply");
-
-    const history = buildThreadHistory(TEST_DIR, 2);
-    expect(history).toContain("first reply");
-    expect(history).not.toContain("second reply");
+  test("handles special characters in content", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    appendToThread(threadFile, "Reply #1", 'Content with "quotes", `backticks`, and ## markdown headers');
+    const content = readFileSync(threadFile, "utf8");
+    expect(content).toContain('"quotes"');
+    expect(content).toContain("`backticks`");
+    expect(content).toContain("## markdown headers");
   });
 
-  test("handles multiple exchanges in order", () => {
-    writeFileSync(join(TEST_DIR, "01-reply.md"), "first question");
-    writeFileSync(join(TEST_DIR, "01-response.md"), "first answer");
-    writeFileSync(join(TEST_DIR, "02-reply.md"), "second question");
-    writeFileSync(join(TEST_DIR, "02-response.md"), "second answer");
-
-    const history = buildThreadHistory(TEST_DIR, 3);
-    expect(history).toContain("### Exchange #1");
-    expect(history).toContain("### Exchange #2");
-    const idx1 = history.indexOf("Exchange #1");
-    const idx2 = history.indexOf("Exchange #2");
-    expect(idx1).toBeLessThan(idx2);
-  });
-
-  test("handles missing response file (reply without response yet)", () => {
-    writeFileSync(join(TEST_DIR, "01-reply.md"), "question");
-    // no 01-response.md
-
-    const history = buildThreadHistory(TEST_DIR, 2);
-    expect(history).toContain("Exchange #1");
-    expect(history).toContain("question");
-  });
-});
-
-describe("buildReplyContext", () => {
-  const meta = {
-    from: "sam@test.com",
-    subject: "Re: 2026-02-09 Carlton Briefing Notes",
-    date: "2026-02-09T10:00:00",
-    account: "sam@test.com",
-    threadId: "thread123",
-    messageId: "msg456",
-    briefingDate: "2026-02-09",
-  };
-
-  const files = {
-    replyFile: "reports/2026-02-09/responses/01-reply.md",
-    responseFile: "reports/2026-02-09/responses/01-response.md",
-    contextFile: "reports/2026-02-09/responses/01-context.md",
-  };
-
-  test("includes reply content", () => {
-    const ctx = buildReplyContext(meta, "Add shamrock emojis please", "", files);
-    expect(ctx).toContain("Add shamrock emojis please");
-  });
-
-  test("includes thread history when provided", () => {
-    const history = "## Previous Exchanges\n\n### Exchange #1\n**User:** hi\n**Carlton:** hello\n\n";
-    const ctx = buildReplyContext(meta, "follow up", history, files);
-    expect(ctx).toContain("## Previous Exchanges");
-    expect(ctx).toContain("Exchange #1");
-  });
-
-  test("includes response file path for Claude to write to", () => {
-    const ctx = buildReplyContext(meta, "test", "", files);
-    expect(ctx).toContain("Write your response to: reports/2026-02-09/responses/01-response.md");
-  });
-
-  test("includes reply-to command with correct subject", () => {
-    const ctx = buildReplyContext(meta, "test", "", files);
-    expect(ctx).toContain('bun carlton reply-to "Re: 2026-02-09 Carlton Briefing Notes"');
-  });
-
-  test("memory instructions specify preference category only", () => {
-    const ctx = buildReplyContext(meta, "test", "", files);
-    expect(ctx).toContain("USER PREFERENCES");
-    expect(ctx).toContain("preference:");
-    expect(ctx).toContain("Do NOT log process observations");
-  });
-
-  test("data files section references correct date", () => {
-    const ctx = buildReplyContext(meta, "test", "", files);
-    expect(ctx).toContain("reports/2026-02-09/");
+  test("concurrent appends both appear", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    writeFileSync(threadFile, "# Thread\n");
+    // Simulate rapid sequential appends (Node/Bun is single-threaded so true concurrent is unnecessary)
+    appendToThread(threadFile, "Reply #1", "first");
+    appendToThread(threadFile, "Reply #2", "second");
+    const content = readFileSync(threadFile, "utf8");
+    expect(content).toContain("Reply #1");
+    expect(content).toContain("Reply #2");
+    expect(content).toContain("first");
+    expect(content).toContain("second");
   });
 });
 
-describe("reply file structure", () => {
-  test("all files for an exchange live in the same directory", () => {
-    const responsesDir = join(TEST_DIR, "responses");
-    mkdirSync(responsesDir, { recursive: true });
-
-    const paths = replyFilePaths(responsesDir, 1);
-    writeReplyFile(paths.replyFile, 1, "sam@test.com", "2026-02-09", "Re: Briefing", "test body");
-    writeFileSync(paths.contextFile, buildReplyContext(
-      { from: "sam@test.com", subject: "Re: Briefing", date: "2026-02-09", account: "sam@test.com", threadId: "t1", messageId: "m1", briefingDate: "2026-02-09" },
-      "test body", "", paths
-    ));
-
-    const files = readdirSync(responsesDir);
-    expect(files).toContain("01-reply.md");
-    expect(files).toContain("01-context.md");
-    // 01-response.md is written by the spawned Claude, not by us
+describe("removeNewMarkers", () => {
+  test("removes NEW prefix from reply headers", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    writeFileSync(threadFile, "## NEW Reply #1 (2026-02-08 from sam@test.com)\n\nHello\n");
+    removeNewMarkers(threadFile);
+    const content = readFileSync(threadFile, "utf8");
+    expect(content).toContain("## Reply #1");
+    expect(content).not.toContain("NEW");
   });
 
-  test("no files created in project root", () => {
-    const responsesDir = join(TEST_DIR, "responses");
-    mkdirSync(responsesDir, { recursive: true });
+  test("leaves non-NEW sections untouched", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    writeFileSync(threadFile, "## Briefing Sent\n\ncontent\n\n## Reply #1\n\nold reply\n\n## NEW Reply #2\n\nnew reply\n");
+    removeNewMarkers(threadFile);
+    const content = readFileSync(threadFile, "utf8");
+    expect(content).toContain("## Briefing Sent");
+    expect(content).toContain("## Reply #1");
+    expect(content).toContain("## Reply #2");
+    expect(content).not.toContain("NEW");
+  });
 
-    const paths = replyFilePaths(responsesDir, 1);
-    writeReplyFile(paths.replyFile, 1, "sam@test.com", "2026-02-09", "Re: Briefing", "test");
-    writeFileSync(paths.contextFile, "context content");
+  test("handles multiple NEW markers in one pass", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    writeFileSync(threadFile, "## NEW Reply #2\n\nsecond\n\n## NEW Reply #3\n\nthird\n");
+    removeNewMarkers(threadFile);
+    const content = readFileSync(threadFile, "utf8");
+    expect(content).toContain("## Reply #2");
+    expect(content).toContain("## Reply #3");
+    expect(content).not.toContain("NEW");
+    expect(content).toContain("second");
+    expect(content).toContain("third");
+  });
 
-    const rootFiles = readdirSync(TEST_DIR).filter(f => f.startsWith(".carlton-reply"));
-    expect(rootFiles).toHaveLength(0);
+  test("no-op if no NEW markers", () => {
+    const threadFile = join(TEST_DIR, "thread.md");
+    const original = "## Reply #1\n\ncontent\n";
+    writeFileSync(threadFile, original);
+    removeNewMarkers(threadFile);
+    expect(readFileSync(threadFile, "utf8")).toBe(original);
+  });
+
+  test("no-op for nonexistent file", () => {
+    removeNewMarkers(join(TEST_DIR, "nonexistent.md"));
+    // should not throw
+  });
+});
+
+describe("buildReplyPrompt", () => {
+  test("throws when thread.md is missing", () => {
+    expect(() => buildReplyPrompt("2099-01-01")).toThrow("No thread.md found");
   });
 });
