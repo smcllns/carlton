@@ -36,10 +36,12 @@ bun carlton send [date]              # Research tomorrow (or date), email briefi
 bun carlton [date]                   # Same but local only, no email
 ```
 
-To handle reply emails, Carlton needs tmux — it spawns a Claude session per reply in its own tmux window so you can see what it's doing and approve permissions as needed. Once you've approved the common ones, it becomes hands-off.
+Carlton spawns parallel Claude sessions to handle replies, so run it inside tmux to manage them:
 
 ```bash
-tmux new -s carlton 'bun carlton'    # send + poll for replies
+# Run tmux before running Claude to help manage parallel Claude sessions
+tmux new -s carlton
+bun carlton serve
 ```
 
 Output goes to `reports/YYYY-MM-DD/`. Run `bun carlton --help` for all commands.
