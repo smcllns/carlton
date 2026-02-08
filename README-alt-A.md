@@ -37,25 +37,6 @@ bun carlton send                      # Just research and email (no tmux needed)
 bun carlton 2026-02-10                # Specific date, local only, no email
 ```
 
-<details>
-<summary>All commands</summary>
-
-| Command | What it does |
-|---------|-------------|
-| `bun carlton` | `send` + `serve` (requires tmux) |
-| `bun carlton <date>` | Prep for a date, local only |
-| `bun carlton send [date]` | Research + curate + email |
-| `bun carlton send-briefing <date>` | Email an already-written briefing |
-| `bun carlton serve` | Poll for reply emails (requires tmux) |
-| `bun carlton reply-to <subj> <file>` | Send a threaded reply |
-| `bun carlton reset` | Wipe reports, memory, processed IDs |
-| `bun carlton setup` | Check auth status |
-| `bun carlton auth` | Show setup instructions |
-| `bun carlton credentials` | Register OAuth credentials |
-| `bun carlton accounts add <email>` | Add a Google account |
-
-</details>
-
 Output goes to `reports/YYYY-MM-DD/`.
 
 ## How it works
@@ -77,6 +58,23 @@ Google access is strictly read-only — search, list, get. No sends, creates, up
 Email delivery uses Resend, which is completely separate from Google auth. `email.ts` cannot import `google.ts` or access Google credentials (also enforced by safety tests).
 
 Data flow: Google (read) → Carlton (process) → Resend (send to user)
+
+## All commands
+
+| Command | What it does |
+|---------|-------------|
+| `bun carlton` | `send` + `serve` (requires tmux) |
+| `bun carlton <date>` | Prep for a date, local only |
+| `bun carlton send [date]` | Research + curate + email |
+| `bun carlton send-briefing <date>` | Email an already-written briefing |
+| `bun carlton serve` | Poll for reply emails (requires tmux) |
+| `bun carlton reply-to <subj> <file>` | Send a threaded reply |
+| `bun carlton reset` | Wipe reports, memory, processed IDs |
+| `bun carlton setup` | Check auth status |
+| `bun carlton auth` | Show setup instructions |
+| `bun carlton credentials` | Register OAuth credentials |
+| `bun carlton accounts add <email>` | Add a Google account |
+| `bun test` | Run tests |
 
 ## Docs
 
