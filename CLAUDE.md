@@ -52,7 +52,7 @@ Carlton separates Google data access from email delivery:
 
 Read `reports/memory.txt` before starting any work. It contains accumulated learnings about user preferences, meeting prep style, and technical gotchas.
 
-A stop hook will remind you to update memory.txt before finishing. Format:
+A stop hook will remind you to update memory.txt before finishing. Record what you learned that would help another agent avoid the same mistake. Format:
 
 ```
 [YYYY-MM-DD] category: one-line learning
@@ -62,5 +62,12 @@ Categories:
 - **preference** — How the user wants meeting prep (format, tone, emphasis)
 - **process** — Workflow improvements, what to do differently
 - **gotcha** — API quirks, auth issues, library behavior
+
+Examples:
+```
+[2026-02-07] preference: User wants attendee names, not email addresses, in report headers.
+[2026-02-07] gotcha: gccli requires Z suffix on datetime strings or returns Bad Request.
+[2026-02-07] process: Subscription calendars (birthdays, holidays) throw Bad Request on listEvents — skip silently.
+```
 
 @reports/memory.txt
