@@ -36,11 +36,11 @@ import {
   writeReplyFile,
   replyFilePaths,
 } from "./reply.ts";
-import { resolve, join } from "path";
+import { join } from "path";
 import { createHash } from "crypto";
 import { $ } from "bun";
 import { runResearch } from "./research.ts";
-import { buildCuratorContext, spawnCurator } from "./curator.ts";
+import { buildCuratorContext, runCurator } from "./curator.ts";
 
 function getTomorrow(): string {
   const d = new Date();
@@ -289,18 +289,6 @@ async function cmdSend(date: string) {
     return;
   }
 
-  if (!process.env.TMUX) {
-    console.log("Not in tmux — sending basic briefing (no research/curator).\n");
-    const tldr = `> *${randomTldr(date, events)}*\n\n`;
-    const combined = tldr + reports.map((r) => r.content).join("\n\n---\n\n");
-    const subject = `${date} Carlton Briefing Notes`;
-    const messageId = await sendBriefing(prompt.delivery.email, subject, combined);
-    writeFileSync(sentMarker, messageId, "utf8");
-    console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
-    console.log(`   Message ID: ${messageId}`);
-    return;
-  }
-
   console.log("Running research on each meeting...\n");
   const researchResults = await runResearch(date, events, prompt);
 
@@ -313,22 +301,19 @@ async function cmdSend(date: string) {
   writeFileSync(contextFile, context, "utf8");
   console.log(`Curator context written to: ${contextFile}\n`);
 
-  spawnCurator(date, contextFile);
+  const exitCode = await runCurator(date, contextFile);
 
-  // Wait for curator to send the briefing, then confirm
-  const deadline = Date.now() + 180_000;
-  const check = async () => {
-    while (Date.now() < deadline) {
-      if (existsSync(sentMarker)) {
-        const messageId = readFileSync(sentMarker, "utf8").trim();
-        console.log(`✅ Briefing sent! (${messageId})`);
-        return;
-      }
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-    console.log("⚠️  Curator timed out — briefing may not have sent. Check tmux windows.");
-  };
-  await check();
+  if (exitCode !== 0) {
+    console.error(`❌ Curator exited with code ${exitCode}.`);
+    process.exit(1);
+  }
+
+  if (existsSync(sentMarker)) {
+    const messageId = readFileSync(sentMarker, "utf8").trim();
+    console.log(`✅ Briefing sent! (${messageId})`);
+  } else {
+    console.error("⚠️  Curator finished but briefing wasn't sent. Check reports/ for details.");
+  }
 }
 
 async function cmdSendBriefing(date: string) {
@@ -353,13 +338,6 @@ async function cmdSendBriefing(date: string) {
   console.log(`   Message ID: ${messageId}`);
 }
 
-function randomTldr(date: string, events: CalendarEvent[]): string {
-  const hex = createHash("sha256").update(`${date}-${Date.now()}`).digest("hex").slice(0, 6);
-  const count = events.length;
-  const times = events.map((e) => formatTimeShort(e.start)).filter(Boolean);
-  const range = times.length >= 2 ? `${times[0]}–${times[times.length - 1]}` : times[0] || "all day";
-  return `${count} meeting${count !== 1 ? "s" : ""} on deck for ${date}, ${range} — ref:${hex}`;
-}
 
 function replyContentHash(msg: any): string {
   if (msg.id) return msg.id;

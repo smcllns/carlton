@@ -92,6 +92,7 @@ function preflight() {
 // --- Steps ---
 
 async function step1_createTestReport() {
+  if (existsSync(DATE_DIR)) rmSync(DATE_DIR, { recursive: true, force: true });
   mkdirSync(DATE_DIR, { recursive: true });
 
   const report = `# ☘️🦊 E2E Test Standup
@@ -191,10 +192,11 @@ async function step4_simulateReply1() {
 
   const windowName = "e2e-reply-01";
   const contextRelative = `reports/${TEST_DATE}/responses/01-context.md`;
-  const claudeCmd = `claude "A user replied to a Carlton briefing email. Read ${contextRelative} for the full context and instructions."`;
+  const logFile = join(DATE_DIR, "e2e-reply-01.log");
+  const claudeCmd = `claude "A user replied to a Carlton briefing email. Read ${contextRelative} for the full context and instructions." 2>&1 | tee ${logFile}`;
 
   Bun.spawn(
-    ["tmux", "new-window", "-n", windowName, "-c", PROJECT_ROOT, claudeCmd],
+    ["tmux", "new-window", "-d", "-n", windowName, "-c", PROJECT_ROOT, claudeCmd],
     { stdio: ["ignore", "ignore", "ignore"] },
   );
 
@@ -248,10 +250,11 @@ async function step6_simulateReply2() {
 
   const windowName = "e2e-reply-02";
   const contextRelative = `reports/${TEST_DATE}/responses/02-context.md`;
-  const claudeCmd = `claude "A user replied to a Carlton briefing email. Read ${contextRelative} for the full context and instructions."`;
+  const logFile = join(DATE_DIR, "e2e-reply-02.log");
+  const claudeCmd = `claude "A user replied to a Carlton briefing email. Read ${contextRelative} for the full context and instructions." 2>&1 | tee ${logFile}`;
 
   Bun.spawn(
-    ["tmux", "new-window", "-n", windowName, "-c", PROJECT_ROOT, claudeCmd],
+    ["tmux", "new-window", "-d", "-n", windowName, "-c", PROJECT_ROOT, claudeCmd],
     { stdio: ["ignore", "ignore", "ignore"] },
   );
 
@@ -326,6 +329,17 @@ async function main() {
     await step7_waitForResponse2();
   } catch (err: any) {
     record(err.message.slice(0, 60), false, err.message);
+  }
+
+  const hasFailures = results.some((r) => !r.passed);
+  if (hasFailures) {
+    for (const logName of ["e2e-reply-01.log", "e2e-reply-02.log"]) {
+      const logPath = join(DATE_DIR, logName);
+      if (existsSync(logPath)) {
+        const log = readFileSync(logPath, "utf8").trim();
+        console.log(`\n--- ${logName} ---\n${log.slice(-2000)}\n`);
+      }
+    }
   }
 
   step8_cleanup();

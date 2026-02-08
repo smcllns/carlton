@@ -9,7 +9,7 @@ New agents: read this entire file before starting work.
 [2026-02-07] gotcha: gccli events --query does free text search on event summaries. Use --from/--to with ISO 8601 dates to control the time range. Default only returns 1 week from now.
 [2026-02-07] process: When user says "this event" ambiguously, ask for clarification rather than guessing. Use `bunx gmcli <email> thread <thread_id>` to read full email thread context before responding.
 [2026-02-07] process: Check previous responses in the thread before researching. If the answer was already sent, re-share it rather than re-running all queries. Read reports/YYYY-MM-DD/responses/ directory first.
-[2026-02-07] preference: Use shamrock (☘️) and doughnut (🍩) emojis as section markers in briefings and reports.
+[2026-02-07] preference: Use superhero (🦸) and doughnut (🍩) emojis as section markers in briefings and reports.
 [2026-02-07] gotcha: When user requests a formatting preference, actually update the source code (src/report.ts formatBasicReport) — don't just note it in memory.
 [2026-02-07] process: Removed gitSnapshot() — send/reply-to no longer auto-commit. Reports/ is gitignored. Git history is code-only now.
 [2026-02-07] preference: Start each daily briefing with a joke at the top, before the meeting summaries. The joke should be about one of the day's events.

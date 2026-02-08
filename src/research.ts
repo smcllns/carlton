@@ -100,7 +100,7 @@ export async function runResearch(
         {
           cwd: projectRoot,
           stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env },
+          env: process.env,
         },
       );
 

@@ -1,98 +1,85 @@
 # Carlton
 
-Read-only meeting prep CLI. Pulls calendar events across multiple Google accounts and generates briefing docs.
+Read-only meeting prep CLI. Pulls calendar events across multiple Google accounts, researches each meeting via Gmail/Calendar/Drive, and emails you a daily briefing.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`npm install -g @anthropic-ai/claude-code`)
 - A Google Cloud project with Calendar, Gmail, and Drive APIs enabled
+- A [Resend](https://resend.com) API key for email delivery
 
 ## Setup
 
 ```bash
+git clone <repo> && cd carlton
 bun install
-bun carlton auth                              # See full setup instructions
+
+# Auth setup
+bun carlton auth                              # Shows full setup instructions
 # Drop your Google Cloud OAuth JSON into credentials/
 bun carlton credentials                       # Register with all Google tools
 bun carlton accounts add you@gmail.com        # Add account (opens browser for OAuth)
 bun carlton setup                             # Verify auth
+
+# Email delivery
+cp .env.example .env                          # Add your RESEND_API_KEY
 ```
+
+Then edit `PROMPT.md` with your accounts, delivery email, and preferences.
 
 ## Usage
 
 ```bash
-bun carlton                          # Prep for tomorrow (send + serve)
-bun carlton 2026-02-10               # Prep for specific date (local only)
+bun carlton                          # send + serve (requires tmux)
+bun carlton 2026-02-10               # Prep for specific date (local only, no email)
 bun carlton send                     # Research + curate + email tomorrow's briefing
 bun carlton send 2026-02-10          # Research + curate + email for specific date
 bun carlton send-briefing 2026-02-10 # Send an already-written briefing.md
-bun carlton serve                    # Poll for email replies, spawn Claude in tmux
+bun carlton serve                    # Poll for email replies, spawn Claude agents (requires tmux)
 bun carlton reply-to <subj> <file>   # Send a threaded reply via Resend
+bun carlton reset                    # Wipe reports, memory, processed IDs (keeps auth)
 bun carlton setup                    # Check auth status
 bun carlton auth                     # Setup instructions
 bun carlton credentials              # Register OAuth credentials
-bun carlton accounts add <e>         # Add a Google account
+bun carlton accounts add <email>     # Add a Google account
 bun test                             # Run tests
 ```
 
 Reports are written to `reports/YYYY-MM-DD/`.
 
-### Development
+### How `send` works
 
-Both `send` and `serve` must run inside tmux (they spawn Claude agents as tmux panes).
+1. Fetches calendar events for the target date across all configured accounts
+2. Spawns parallel Claude agents (haiku) to research each meeting via Gmail, Calendar, and Drive
+3. Hands all research to a curator agent that compiles a polished briefing
+4. Curator sends the briefing email via Resend
+
+No tmux required. Runs headlessly.
+
+### How `serve` works
+
+Polls Gmail for replies to briefing emails. When a reply is detected, spawns an interactive Claude agent in a tmux window to research and respond. Requires tmux.
 
 ```bash
-tmux new -s carlton                           # start a tmux session first
-bun carlton send --test && bun carlton serve  # then run inside it
+tmux new -s carlton
+bun carlton serve
 ```
 
-`--test` clears the sent marker so the briefing re-sends. Without it, `send` skips if a briefing was already sent for that date. Once `serve` starts, reply to the briefing email and watch Claude agents spawn as panes.
-
-E2E test (also requires tmux):
+### E2E test
 
 ```bash
 tmux new -s carlton-test 'bun test/e2e.ts'
 ```
 
-## Overview
-
-Carlton is a read-only meeting prep CLI that:
-1. Fetches calendar events for a target day (default: tomorrow) across **multiple Google accounts**
-2. Spawns parallel Claude agents (haiku) to research each meeting via Gmail, Calendar, and Drive
-3. Hands research to a curator agent that compiles a polished briefing and sends it via email
-4. Monitors for email replies — spawns interactive Claude sessions to research and respond
-5. Learns user preferences over time via a persistent `memory.txt`
-
-## Core Principles
-
-- **Read-only on user data.** Carlton never sends emails from the user's Gmail, creates drafts, edits calendar events, or deletes anything. Hard-coded guardrails enforce this.
-- **Minimal and inspectable.** The user trusts this tool with sensitive data. Code must be simple, clear, and easy to audit.
-- **Multi-account.** The user has many Gmail/Calendar accounts. Carlton checks all of them.
-- **Learning system.** Each session appends to `memory.txt` what worked, what didn't, and what the user prefers. Future agents read this before starting.
-
 ## Security Model
 
 Carlton separates **reading user data** from **sending output**:
 
-- **Google services (Gmail, Calendar, Drive) are read-only** — enforced by code, safety tests, and architecture. Carlton can search, list, and get. It cannot send, create, update, or delete.
-- **Email delivery uses Resend**, a separate transactional email API with its own API key (`RESEND_API_KEY`). Carlton sends briefings *to* the user — it cannot send *as* the user.
-- **`src/email.ts` is architecturally isolated from Google** — it cannot import `google.ts` or access Gmail/Calendar/Drive credentials. Safety tests enforce this boundary.
+- **Google services (Gmail, Calendar, Drive) are read-only** — enforced by code and safety tests. Carlton can search, list, and get. It cannot send, create, update, or delete.
+- **Email delivery uses Resend**, a separate transactional email API. Carlton sends briefings *to* the user — it cannot send *as* the user.
+- **`src/email.ts` is isolated from Google** — it cannot import `google.ts` or access Google credentials. Safety tests enforce this.
 - **Data flow:** Google (read) → Carlton (process) → Resend (send to user)
-- **Even a rogue agent cannot:** send email as the user, modify their calendar, delete their files, or access Google credentials from the email module.
-
-## Tech Stack
-
-| Component | Choice |
-|-----------|--------|
-| Runtime | Bun |
-| Language | TypeScript |
-| Gmail | `@mariozechner/gmcli` (library import) |
-| Calendar | `@mariozechner/gccli` (library import) |
-| Drive | `@mariozechner/gdcli` (library import) |
-| Email delivery | `resend` (transactional API, separate from Gmail) |
-| Markdown→HTML | `marked` |
-| Testing | `bun:test` (TDD) |
-| Invocation | `bun carlton` (via package.json scripts) |
 
 ## Auth Strategy
 
@@ -101,156 +88,27 @@ Carlton separates **reading user data** from **sending output**:
 - `bun carlton credentials` registers the same credentials file with all three tools
 - `bun carlton accounts add you@gmail.com` adds an account to all three tools in one command
 - Tokens stored separately in `~/.gmcli/`, `~/.gccli/`, `~/.gdcli/`
-- **Readonly scopes:** Upstream tools currently request full access scopes. Plan: fork the three tools to use readonly scopes (`gmail.readonly`, `calendar.readonly`, `drive.readonly`). Until then, Carlton's code never calls write/send/delete methods and this is documented + tested.
 
 ## Folder Structure
 
 ```
 carlton/
-├── credentials/
-│   ├── .gitkeep
-│   └── *.json            # OAuth credentials (gitignored)
+├── credentials/          # OAuth credentials (gitignored)
 ├── src/
 │   ├── index.ts          # CLI entry point and all commands
-│   ├── config.ts         # Config management
+│   ├── config.ts         # Path helpers
 │   ├── google.ts         # Service wrappers (gmail, calendar, drive)
 │   ├── calendar.ts       # Multi-account event fetching + dedup
 │   ├── report.ts         # Report generation + file output
 │   ├── research.ts       # Parallel per-meeting research via Claude agents
-│   ├── curator.ts        # Curator agent context builder + spawner
-│   ├── reply.ts          # Reply thread handling (numbering, context, history)
+│   ├── curator.ts        # Curator agent context builder + runner
+│   ├── reply.ts          # Reply thread handling
 │   ├── prompt.ts         # PROMPT.md parser
 │   ├── email.ts          # Resend email delivery (isolated from Google)
 │   └── *.test.ts         # Tests
-├── reports/              # All output (gitignored, local only)
-│   ├── [YYYY-MM-DD]/
-│   │   ├── [HH-MM-meeting-title].md  # Per-meeting report
-│   │   ├── research/                  # Research agent output
-│   │   ├── briefing.md                # Curator's compiled briefing
-│   │   ├── curator-context.md         # Context passed to curator
-│   │   └── responses/                 # Reply thread files (01-reply.md, 01-response.md, ...)
-│   └── memory.txt
+├── reports/              # All output (gitignored)
 ├── PROMPT.md             # User config (accounts, delivery, format)
 ├── .env                  # RESEND_API_KEY (gitignored)
-├── .env.example          # API key placeholder
 ├── CLAUDE.md             # Agent instructions
-├── README.md             # This file
-├── package.json
-└── tsconfig.json
+└── README.md
 ```
-
-## Milestones
-
-### Milestone 1: Read One Calendar
-**Goal:** Prove auth works end-to-end. Fetch events from one calendar account for a given date.
-
-- [x] Project structure (Bun + TS + deps)
-- [x] Import gccli CalendarService as library
-- [x] CLI: `bun carlton setup` shows auth status
-- [x] CLI: `bun carlton auth` shows setup instructions
-- [x] **User test:** Run `bun carlton setup`, then `bun carlton 2026-02-09` with configured accounts
-- [x] Confirm events are fetched and printed
-
-### Milestone 2: All Calendars + File Output
-**Goal:** Fetch events from ALL calendars across ALL accounts. Deduplicate. Output `.md` files.
-
-- [x] Iterate all calendars per account (not just `primary`)
-- [x] Deduplicate events appearing in multiple calendars
-- [x] Create `reports/YYYY-MM-DD/HH-MM-title.md` files
-- [ ] **User test:** Run for a day with events across multiple accounts, verify file output
-
-### Milestone 2.5: Email Reply Loop
-**Goal:** Personalize via PROMPT.md, deliver briefings by email, respond to reply threads.
-
-- [x] PROMPT.md restructured into parseable sections (Accounts, Delivery, Briefing Format, Research Instructions)
-- [x] `src/prompt.ts` parser with tests
-- [x] Email delivery via Resend (`bun carlton send`)
-- [x] `src/email.ts` isolated from Google services (safety-tested)
-- [x] Reply polling loop (`bun carlton serve`)
-- [x] Reply handler spawns interactive Claude in tmux windows
-- [x] Thread history tracking (numbered exchanges)
-- [x] Content-hash dedup for reply detection
-- [x] **User test:** Full reply loop tested — briefing, replies, research replies all working
-
-### Milestone 3: Cross-Service Research
-**Goal:** For each meeting, pull context from Gmail, Calendar history, and Google Drive.
-
-- [x] Parallel research agents (Claude haiku) per meeting
-- [x] Research prompt with CLI tool instructions for gmcli, gccli, gdcli
-- [x] Curator agent compiles research into polished briefing
-- [x] `send-briefing` command for sending curator output
-- [ ] **User test:** Review research quality, tune research instructions in PROMPT.md
-
-### Milestone 4: Building Great Meeting Prep Docs
-**Goal:** Learn what the user actually wants in prep docs. Iterate on format, content, emphasis. Systematically log all preferences,  learnings, and user corrections. Then periodically sumamrize those to build a playbook that works well all the time.
-
-- [ ] Work through example reports one by one with user
-- [ ] Record every preference to memory.txt
-- [ ] Refine report template based on accumulated feedback
-- [ ] Build rich context (recent email threads, shared docs, past meeting notes)
-- [ ] **User test:** User reviews reports and provides feedback, Carlton improves
-
-## Safety Guardrails
-
-Carlton is **read-only**. The following must never happen:
-- No `sendMessage`, `sendDraft`, `createDraft`, `updateDraft`, `deleteDraft` (Gmail)
-- No `createEvent`, `updateEvent`, `deleteEvent` (Calendar)
-- No `upload`, `delete`, `mkdir`, `move`, `rename`, `share`, `unshare` (Drive)
-
-These constraints are:
-1. Documented in CLAUDE.md
-2. Not called anywhere in Carlton's source code
-3. Tested (import checks in test suite)
-
----
-
-## Appendix: Original User Direction (Verbatim)
-
-> I want you to make a small minimal command line tool for helping me prepare for meetings. The tool will be called Carlton. He's preppy. The job of Carlton is to look at my calendars for a given day (by default tomorrow, but I want to be able to specify the date) and fetch all my meetings for that day and then for each meeting to do some research in my gmail, calendar, and docs on the attendees and create a meeting briefing doc the way I need for each meeting.
->
-> The main complexity comes from:
-> (1) I have many different calendars and many different email inboxes that need to be checked, but they're all Gmail and Google calendar.
-> (2) it will take time to learn how to research people and find the type of information I'm looking for, and be able to prepare the meeting prep notes just the way that I want. I'm also learning how to use claude best for this and so it'll be a two way learning process.
->
-> I want this to be a minimal, clear code base that I can trust and inspect to do an important job for me, and be exposed to my most sensitive data.
->
-> I want you to use gmcli for Gmail, and gccli and gdcli for calendar and drive. Only use those libraries to interact with Gmail, Gdrive and Gcal. If you need to adjust them, fork our own versions and modify to suit our needs. Find links to those here: https://github.com/badlogic/pi-skills/tree/main
->
-> We already do this on a similar project with just email with npm.com/@smcllns/gmail, so lets use a similar bunx shorthand for calling gmail, drive and cal for this CLI.
->
-> This app is read-only. It does not require sending emails, composing drafts, creating or editing calendar invites, or deleting anything. It does smart retrieval and summarization, and can pick up follow up questions/comments from the user on how to improve/extend certain meeting summaries.
->
-> We should use oauth scopes for readonly, or at least have hard coded preventions and clear documentation/hooks to clarify for all agents that this app does not require sending emails, composing drafts, creating or editing calendar invites, or deleting anything.
->
-> I will get Google Cloud oauth key, and I want to login once per account and you use that same Google auth across all three libraries. Give me a prompt I can give to ChatGPT or Claude to walk me through setting up the oauth tokens for this.
->
-> Have it run in a folder structure on my computer like this
->
-> carlton/
-> -.git
-> -src/ (All the src files and credentials you need to run this)
-> reports/
-> [YYYY-MM-DD]/
-> -[HH-MM-meeting-title].md
-> memory.txt
->
-> Every you time you complete a report, append to memory.txt:
-> - All feedback the user gave you about what they wanted differently
-> - Issues that took many attempts to solve and what the final solution was
-> - Things you learned in this report that will help a future agent starting fresh
->
-> Every time a new agent starts up, make sure memory text is injected into their prompt (the easiest way is like to use @ syntax to include the whole file @path/to/memory.txt in the CLAUDE.md
->
-> Then I want you to build this step by step. Mostly work through it on your own and test it works, but then I want to test out the flow and you show me how to run at it each milestone (and let's confirm together it works the way I expect):
->
-> Milestone 1: Read one of my calendars (get all the auth setup etc and prove it works)
->
-> Milestone 2: Read all my calendars correctly and dedupe if needed (output empty md files in a folder with the right date)
->
-> Milestone 3: Research my events in a given day (in a basic way) by pulling in context from gmail, calendar and docs (prove we have all these connected and working)
->
-> Milestone 4: Get good at building great meeting prep docs - output exactly the format I want, pull in the key info I'm looking for, emphasize the right parts. Learn my style and needs (have built up good memory from many attempts). The best way to do this is to work through lots of example meeting reports together, one by one, and LLM record to memory all the things I want and tend to prefer. This means the workflow becomes
->
-> Use Typescript, Bun, TDD, and bunx (preferred) or uvx (not pip). Keep the code simple and easy to reason about while developing.
->
-> First order of business is probably translate this messy stream of direction into a more structured instruction for LLMs to be able to research and build a plan. Include this verbatim prompt for posterity in the plan file appendix, interesting to keep the original source and compare over time/catch drift.

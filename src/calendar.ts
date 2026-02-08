@@ -3,7 +3,6 @@
  */
 
 import { getCalendar } from "./google.ts";
-import { loadConfig } from "./config.ts";
 
 export interface CalendarEvent {
   id: string;

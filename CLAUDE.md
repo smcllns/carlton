@@ -15,9 +15,12 @@ Carlton fetches calendar events for a given day (default: tomorrow) across multi
 - `src/google.ts` — Wrappers for gccli, gmcli, gdcli
 - `src/calendar.ts` — Multi-account event fetching + dedup
 - `src/report.ts` — Report generation and file output
+- `src/research.ts` — Parallel per-meeting research via Claude agents
+- `src/curator.ts` — Curator agent that compiles research into a briefing
+- `src/reply.ts` — Reply thread handling (numbering, context, history)
 - `src/prompt.ts` — PROMPT.md parser (accounts, delivery, freeform sections)
 - `src/email.ts` — Resend email delivery (⚠️ isolated from Google — see Security below)
-- `src/config.ts` — Config management
+- `src/config.ts` — Path helpers (project root, reports dir, memory file)
 - `PROMPT.md` — User config (accounts, delivery, briefing format, research instructions)
 - `credentials/` — Your OAuth JSON goes here (gitignored)
 

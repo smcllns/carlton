@@ -4,7 +4,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { getReportsDir, getMemoryFile } from "./config.ts";
+import { getReportsDir } from "./config.ts";
 import type { CalendarEvent } from "./calendar.ts";
 
 /** Create the report directory for a date and return empty .md files for each event */
@@ -49,16 +49,6 @@ export function formatBasicReport(event: CalendarEvent): string {
   return lines.join("\n");
 }
 
-/** Append a note to memory.txt */
-export function appendToMemory(note: string): void {
-  const memFile = getMemoryFile();
-  const existing = fs.existsSync(memFile)
-    ? fs.readFileSync(memFile, "utf8")
-    : "";
-  const timestamp = new Date().toISOString().split("T")[0];
-  const entry = `\n---\n[${timestamp}] ${note}\n`;
-  fs.writeFileSync(memFile, existing + entry, "utf8");
-}
 
 function eventToFilename(event: CalendarEvent): string {
   // Extract HH-MM from start time

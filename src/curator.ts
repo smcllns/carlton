@@ -1,6 +1,6 @@
 import { join } from "path";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "fs";
-import { getProjectRoot, getReportsDir, getMemoryFile } from "./config.ts";
+import { readFileSync, existsSync } from "fs";
+import { getProjectRoot, getMemoryFile } from "./config.ts";
 import { formatBasicReport } from "./report.ts";
 import type { CalendarEvent } from "./calendar.ts";
 import type { PromptConfig } from "./prompt.ts";
@@ -111,18 +111,18 @@ export function buildCuratorContext(
   return sections.join("\n");
 }
 
-export function spawnCurator(date: string, contextFile: string): void {
+export async function runCurator(date: string, contextFile: string): Promise<number> {
   const projectRoot = getProjectRoot();
-  const windowName = `curator-${date}`;
   const contextRelative = contextFile.replace(projectRoot + "/", "");
-  const allowedTools = "Read(reports/**),Write(reports/**),Bash(bun carlton send-briefing:*)";
+  const allowedTools = "Read(reports/**),Write(reports/**),Bash(bun carlton send-briefing *)";
   const prompt = `Read ${contextRelative} — it contains all research, meeting data, and your instructions. You have all the information you need. Do not search for additional information. If you want more context on user preferences, check reports/memory.txt. Follow the task instructions at the end of that file.`;
 
-  console.log(`🤖 Spawning curator...`);
+  console.log(`🤖 Running curator...`);
   const proc = Bun.spawn(
     ["claude", "-p", "--model", "haiku", "--allowedTools", allowedTools],
     { cwd: projectRoot, stdio: ["pipe", "ignore", "ignore"] },
   );
   proc.stdin.write(prompt);
   proc.stdin.end();
+  return proc.exited;
 }
