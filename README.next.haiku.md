@@ -4,7 +4,7 @@ Meeting prep from your calendar, researched in parallel, delivered by email. Rep
 
 Carlton fetches your calendar across multiple Google accounts, spawns Claude agents to research each meeting (Gmail, Calendar, Drive), compiles a briefing, and emails it. Reply to the briefing and Carlton picks up the reply, researches your question, and responds in-thread.
 
-**Read-only and isolated.** Carlton never writes to Google services. Email delivery uses [Resend](https://resend.com) (separate auth) so it cannot send as you, only to you.
+**Read-only and isolated.** Carlton never writes to Google services. Email delivery uses [Resend](https://resend.com) (separate auth) so it cannot send email as you, only to you.
 
 ## Prerequisites
 
