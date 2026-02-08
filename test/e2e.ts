@@ -227,14 +227,22 @@ async function step4_triggerProcessing() {
 
 async function step5_waitForResponse1() {
   const responseFile = join(RESPONSES_DIR, "01-response.md");
+  const lockFile = join(RESPONSES_DIR, ".processing");
 
   console.log("\n⏳ Waiting for Claude to write 01-response.md (timeout: 120s)...");
   const content = await pollForFile(responseFile, 120_000);
-
   assert(content.length > 10, `Response too short (${content.length} chars)`);
 
+  // Wait for Claude to finish all steps (reply-to, memory, rm .processing)
+  // The lock file removal is the last step, so poll for it to disappear
+  console.log("⏳ Waiting for Claude to finish (lock removal, timeout: 60s)...");
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    if (!existsSync(lockFile)) break;
+    await Bun.sleep(3000);
+  }
+
   // Verify thread.md was updated (response appended, NEW marker removed)
-  // Claude must call `bun carlton reply-to <subject> <file> <date>` which does this
   const threadContent = readFileSync(THREAD_FILE, "utf8");
   assert(threadContent.includes("## Response"), "thread.md missing '## Response' — reply-to not called or missing date arg");
   assert(!threadContent.includes("## NEW Reply"), "thread.md still has NEW markers — removeNewMarkers not called");
@@ -316,6 +324,15 @@ async function step7_waitForBatchResponse() {
   }
 
   assert(content.length > 10, "No batch response written");
+
+  // Wait for Claude to finish (lock removal)
+  const lockFile = join(RESPONSES_DIR, ".processing");
+  console.log("⏳ Waiting for Claude to finish (lock removal, timeout: 60s)...");
+  const lockDeadline = Date.now() + 60_000;
+  while (Date.now() < lockDeadline) {
+    if (!existsSync(lockFile)) break;
+    await Bun.sleep(3000);
+  }
 
   const threadContent = readFileSync(THREAD_FILE, "utf8");
   const remainingNew = (threadContent.match(/## NEW Reply/g) || []).length;
