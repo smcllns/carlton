@@ -71,6 +71,16 @@ Two isolation boundaries:
 
 2. **Email delivery is deliberately separated from Google auth.** Carlton uses Resend (a third-party transactional email service) instead of Gmail's send API. This means even if an agent misbehaves, it cannot send email as the user or exfiltrate data through their Gmail account — the Google OAuth tokens have no send capability, and `email.ts` cannot import `google.ts` or access Google credentials (enforced by safety tests). The worst case is a bad email sent from Carlton's Resend domain, not from the user's identity.
 
+## Open Questions
+
+The briefing pipeline works. The reply loop is where the hard problems are:
+
+- **Permission bootstrapping.** Reply agents need to approve tool permissions interactively via tmux before they can go headless. How many sessions until the permission set stabilizes? Can we seed a good default set?
+- **Agent quality control.** A spawned Claude can research, write files, and send email. What guardrails prevent a bad response from going out? Currently: none beyond the safety tests on Google writes.
+- **Concurrency.** Multiple replies can arrive while an agent is working. They spawn in parallel tmux panes, but they're all reading/writing to the same `reports/` directory and `memory.txt`. No locking.
+- **Context window limits.** Thread history grows with each reply. At some point the context file exceeds what Claude can usefully process. No truncation strategy yet.
+- **Memory vs. code changes.** When a user says "always start with a joke", should that go in `memory.txt` (read by future agents) or in `src/report.ts` (changes the code)? Currently agents do both inconsistently.
+
 ## Folder Structure
 
 ```
