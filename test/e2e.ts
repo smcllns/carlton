@@ -136,12 +136,13 @@ async function step2_sendBriefing() {
   const markdown = readFileSync(briefingFile, "utf8");
   const sentMarker = join(DATE_DIR, ".briefing-sent");
 
-  const messageId = await sendBriefing(prompt.delivery.email, TEST_SUBJECT, markdown);
+  const deliveryEmail = process.env.CARLTON_DELIVERY_EMAIL || prompt.delivery.email;
+  const messageId = await sendBriefing(deliveryEmail, TEST_SUBJECT, markdown);
   writeFileSync(sentMarker, messageId, "utf8");
 
   assert(existsSync(sentMarker), ".briefing-sent marker not created");
 
-  record("Send briefing", true, `Sent to ${prompt.delivery.email} (${messageId})`);
+  record("Send briefing", true, `Sent to ${deliveryEmail} (${messageId})`);
 }
 
 async function step3_doubleSendBlocked() {
