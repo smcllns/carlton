@@ -209,7 +209,7 @@ describe("recordReplyDirect", () => {
     expect(existsSync(join(getResponsesDir(), "01-reply.md"))).toBe(true);
 
     const threadContent = readFileSync(join(getTestDir(), "thread.md"), "utf8");
-    expect(threadContent).toContain("## NEW Reply #1");
+    expect(threadContent).toContain("## Reply #1");
     expect(threadContent).toContain("What time is the meeting?");
   });
 
@@ -223,9 +223,9 @@ describe("recordReplyDirect", () => {
     expect(existsSync(join(getResponsesDir(), "03-reply.md"))).toBe(true);
 
     const threadContent = readFileSync(join(getTestDir(), "thread.md"), "utf8");
-    expect(threadContent).toContain("## NEW Reply #1");
-    expect(threadContent).toContain("## NEW Reply #2");
-    expect(threadContent).toContain("## NEW Reply #3");
+    expect(threadContent).toContain("## Reply #1");
+    expect(threadContent).toContain("## Reply #2");
+    expect(threadContent).toContain("## Reply #3");
   });
 
   test("saves Gmail Message-ID to .last-reply-id when provided", () => {
