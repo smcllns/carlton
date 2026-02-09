@@ -26,13 +26,15 @@ export function buildResearchPrompt(
   event: CalendarEvent,
   accounts: string[],
   researchInstructions: string,
+  system?: string,
 ): string {
   const accountList = accounts.map((a) => `- ${a}`).join("\n");
   const attendeeList = event.attendees.length > 0
     ? event.attendees.map((a) => `- ${a}`).join("\n")
     : "- (no attendees listed)";
 
-  return `You are a research assistant preparing context for a meeting.
+  const systemLine = system ? `${system}\n\n` : "";
+  return `${systemLine}You are a research assistant preparing context for a meeting.
 
 ## Meeting
 - **Title:** ${event.summary}
@@ -103,6 +105,7 @@ export async function runResearch(
       event,
       prompt.accounts,
       prompt.researchInstructions,
+      prompt.system,
     );
 
     try {

@@ -36,7 +36,8 @@ export function loadPrompt(filepath = PROMPT_PATH): PromptConfig {
     throw new Error("PROMPT.md missing required section: ## Daily Delivery");
   }
 
-  if (!sections["Briefing Format"]) {
+  const briefingSection = sections["Briefing Format"] || sections["Briefing Email Format"];
+  if (!briefingSection) {
     throw new Error("PROMPT.md missing required section: ## Briefing Format");
   }
 
@@ -51,7 +52,7 @@ export function loadPrompt(filepath = PROMPT_PATH): PromptConfig {
     system: sections["System"] || "",
     accounts,
     delivery,
-    briefingFormat: sections["Briefing Format"].trim(),
+    briefingFormat: briefingSection.trim(),
     researchInstructions: (sections["Research Instructions"] || "").trim(),
   };
 }

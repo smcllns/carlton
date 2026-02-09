@@ -17,6 +17,13 @@ export function buildCuratorContext(
   sections.push(`# Briefing for ${date}`);
   sections.push("");
 
+  if (prompt.system) {
+    sections.push("## System");
+    sections.push("");
+    sections.push(prompt.system);
+    sections.push("");
+  }
+
   sections.push("## Briefing Format");
   sections.push("");
   sections.push(prompt.briefingFormat);

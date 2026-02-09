@@ -309,7 +309,8 @@ async function cmdSendBriefing(date: string) {
   }
 
   const markdown = readFileSync(briefingFile, "utf8");
-  const subject = `${date} Carlton Briefing Notes`;
+  const firstLine = markdown.match(/^#\s+(.+)/m);
+  const subject = firstLine ? firstLine[1].trim() : `${date} Carlton Briefing`;
   const result = await sendBriefing(prompt.delivery.email, subject, markdown, date);
   writeFileSync(sentMarker, JSON.stringify(result), "utf8");
 
