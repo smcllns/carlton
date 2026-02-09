@@ -55,15 +55,17 @@ export async function sendReply(
 ): Promise<string> {
   const html = await marked(markdown);
   const resend = getResend();
+  const headers: Record<string, string> = {};
+  if (inReplyTo) {
+    headers["In-Reply-To"] = inReplyTo;
+    headers["References"] = inReplyTo;
+  }
   const { data, error } = await resend.emails.send({
     from: FROM,
     to,
     subject,
     html,
-    headers: {
-      "In-Reply-To": inReplyTo,
-      References: inReplyTo,
-    },
+    headers,
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
   return data!.id;

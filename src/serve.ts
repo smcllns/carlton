@@ -11,7 +11,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, unlink
 import { join } from "path";
 import { getProjectRoot, getReportsDir } from "./config.ts";
 import {
-  nextResponseNumber,
+  nextReplyNumber,
   writeReplyFile,
   replyFilePaths,
   hasUnprocessedReplies,
@@ -151,7 +151,12 @@ export function triggerProcessing(date: string, staleMinutes: number = 10): Trig
 
   // Write lock and spawn Claude
   writeFileSync(lockFile, new Date().toISOString(), "utf8");
-  spawnClaudeInTmux(date);
+  try {
+    spawnClaudeInTmux(date);
+  } catch (err) {
+    unlinkSync(lockFile);
+    throw err;
+  }
 
   return {
     triggered: true,
@@ -179,7 +184,7 @@ export function recordReplyDirect(
   const threadFile = join(getReportsDir(), date, "thread.md");
   mkdirSync(responsesDir, { recursive: true });
 
-  const num = nextResponseNumber(responsesDir);
+  const num = nextReplyNumber(responsesDir);
   const paths = replyFilePaths(responsesDir, num);
 
   // Write the reply file

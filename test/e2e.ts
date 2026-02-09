@@ -18,7 +18,7 @@ import { join } from "path";
 import { getProjectRoot, getReportsDir } from "../src/config.ts";
 import { loadPrompt } from "../src/prompt.ts";
 import { sendBriefing, type BriefingSentResult } from "../src/email.ts";
-import { hasUnprocessedReplies, removeNewMarkers, appendToThread } from "../src/reply.ts";
+import { hasUnprocessedReplies } from "../src/reply.ts";
 import {
   triggerProcessing,
   recordReplyDirect,
@@ -232,22 +232,20 @@ async function step6_waitForClaudeResponse() {
 }
 
 async function step7_verifyThreadAfterResponse() {
-  // Simulate what cmdReplyTo does after sending
-  const responseFile = join(RESPONSES_DIR, "01-response.md");
-  const responseContent = readFileSync(responseFile, "utf8");
-  appendToThread(THREAD_FILE, "Response to Reply #1", responseContent);
-  removeNewMarkers(THREAD_FILE);
+  const lockFile = getLockFile(TEST_DATE);
+
+  console.log("\n⏳ Waiting for Claude to finish (lock removal, timeout: 120s)...");
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    if (!existsSync(lockFile)) break;
+    await Bun.sleep(3000);
+  }
 
   const threadContent = readFileSync(THREAD_FILE, "utf8");
-  assert(threadContent.includes("## Reply #1"), "NEW marker should be removed");
-  assert(!threadContent.includes("## NEW Reply #1"), "Still has NEW marker");
-  assert(threadContent.includes("Response to Reply #1"), "Response not in thread");
+  assert(threadContent.includes("## Response"), "thread.md missing '## Response' — reply-to not called");
+  assert(!threadContent.includes("## NEW Reply"), "thread.md still has NEW markers — removeNewMarkers not called");
 
-  // Remove lock (simulating Claude finished)
-  removeLock(TEST_DATE);
-  assert(!existsSync(getLockFile(TEST_DATE)), "Lock should be removed");
-
-  record("Thread updated, lock released", true, "NEW markers removed, response appended");
+  record("Thread updated by Claude", true, "Lock removed, NEW markers cleared, response appended");
 }
 
 async function step8_concurrencyTest() {

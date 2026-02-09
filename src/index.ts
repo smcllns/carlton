@@ -30,7 +30,7 @@ import { getGmail } from "./google.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync, appendFileSync } from "fs";
 import {
-  nextResponseNumber,
+  nextReplyNumber,
   writeReplyFile,
   replyFilePaths,
   hasUnprocessedReplies,

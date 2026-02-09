@@ -35,13 +35,10 @@ export function hasUnprocessedReplies(dir: string): boolean {
 }
 
 /**
- * Next response number based on existing reply files.
- * Returns 1 if no replies exist.
+ * Next reply number — uses max existing number + 1 to handle gaps.
  */
-export function nextResponseNumber(responsesDir: string): number {
-  if (!existsSync(responsesDir)) return 1;
-  const files = readdirSync(responsesDir).filter((f) => f.match(/^\d+-reply\.md$/));
-  return files.length + 1;
+export function nextReplyNumber(responsesDir: string): number {
+  return maxReplyNumber(responsesDir) + 1;
 }
 
 /**

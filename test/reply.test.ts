@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
 import {
-  nextResponseNumber,
+  nextReplyNumber,
   writeReplyFile,
   replyFilePaths,
   maxReplyNumber,
@@ -111,28 +111,34 @@ describe("hasUnprocessedReplies", () => {
   });
 });
 
-describe("nextResponseNumber", () => {
+describe("nextReplyNumber", () => {
   test("returns 1 for empty directory", () => {
-    expect(nextResponseNumber(TEST_DIR)).toBe(1);
+    expect(nextReplyNumber(TEST_DIR)).toBe(1);
   });
 
   test("returns 1 for nonexistent directory", () => {
-    expect(nextResponseNumber(join(TEST_DIR, "nope"))).toBe(1);
+    expect(nextReplyNumber(join(TEST_DIR, "nope"))).toBe(1);
   });
 
   test("increments based on existing reply files", () => {
     writeFileSync(join(TEST_DIR, "01-reply.md"), "reply 1");
-    expect(nextResponseNumber(TEST_DIR)).toBe(2);
+    expect(nextReplyNumber(TEST_DIR)).toBe(2);
 
     writeFileSync(join(TEST_DIR, "02-reply.md"), "reply 2");
-    expect(nextResponseNumber(TEST_DIR)).toBe(3);
+    expect(nextReplyNumber(TEST_DIR)).toBe(3);
   });
 
-  test("ignores response and context files in count", () => {
+  test("handles gaps in numbering", () => {
+    writeFileSync(join(TEST_DIR, "01-reply.md"), "reply 1");
+    writeFileSync(join(TEST_DIR, "03-reply.md"), "reply 3");
+    expect(nextReplyNumber(TEST_DIR)).toBe(4);
+  });
+
+  test("ignores response and context files", () => {
     writeFileSync(join(TEST_DIR, "01-reply.md"), "reply");
     writeFileSync(join(TEST_DIR, "01-response.md"), "response");
     writeFileSync(join(TEST_DIR, "01-context.md"), "context");
-    expect(nextResponseNumber(TEST_DIR)).toBe(2);
+    expect(nextReplyNumber(TEST_DIR)).toBe(2);
   });
 });
 
