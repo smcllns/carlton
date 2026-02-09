@@ -26,70 +26,34 @@ export function loadPrompt(filepath = PROMPT_PATH): PromptConfig {
   const raw = fs.readFileSync(filepath, "utf8");
   const sections = parseSections(raw);
 
-  const required = ["Accounts", "Briefing Format", "Research Instructions"];
-  for (const name of required) {
-    if (!sections[name]) {
-      throw new Error(`PROMPT.md missing required section: ## ${name}`);
-    }
+  const accountsSection = sections["Calendars to Include"] || sections["Accounts"];
+  if (!accountsSection) {
+    throw new Error("PROMPT.md missing required section: ## Calendars to Include");
   }
 
-  const deliverySection = sections["Daily Briefing Delivery"] || sections["Delivery"];
+  const deliverySection = sections["Daily Delivery"] || sections["Delivery"] || sections["Daily Briefing Delivery"];
   if (!deliverySection) {
-    throw new Error("PROMPT.md missing required section: ## Daily Briefing Delivery");
+    throw new Error("PROMPT.md missing required section: ## Daily Delivery");
   }
 
-  // Env vars override PROMPT.md
-  const accounts = process.env.CARLTON_ACCOUNTS
-    ? process.env.CARLTON_ACCOUNTS.split(",").map((a) => a.trim()).filter(Boolean)
-    : parseAccountsList(sections["Accounts"]);
+  if (!sections["Briefing Format"]) {
+    throw new Error("PROMPT.md missing required section: ## Briefing Format");
+  }
+
+  const accounts = parseAccountsList(accountsSection);
   if (accounts.length === 0) {
-    throw new Error("No accounts configured. Set CARLTON_ACCOUNTS in .env or list them in PROMPT.md ## Accounts");
+    throw new Error("No accounts configured in PROMPT.md ## Calendars to Include");
   }
 
   const delivery = parseDeliveryConfig(deliverySection);
-  const deliveryOverride = process.env.DELIVER_TO_EMAIL || process.env.CARLTON_DELIVERY_EMAIL;
-  if (deliveryOverride) {
-    delivery.email = deliveryOverride;
-  }
-
-  validateNotPlaceholder(accounts, delivery.email);
 
   return {
     system: sections["System"] || "",
     accounts,
     delivery,
     briefingFormat: sections["Briefing Format"].trim(),
-    researchInstructions: sections["Research Instructions"].trim(),
+    researchInstructions: (sections["Research Instructions"] || "").trim(),
   };
-}
-
-const PLACEHOLDER_PATTERNS = [
-  /^my\w+@/i,
-  /^you@/i,
-  /^your\w*@/i,
-  /^user@/i,
-  /^example@/i,
-  /^test@/i,
-];
-
-function isPlaceholder(email: string): boolean {
-  return PLACEHOLDER_PATTERNS.some((p) => p.test(email));
-}
-
-function validateNotPlaceholder(accounts: string[], deliveryEmail: string) {
-  const bad = accounts.filter(isPlaceholder);
-  if (bad.length > 0) {
-    throw new Error(
-      `Placeholder account(s) detected: ${bad.join(", ")}. ` +
-      `Set real emails via CARLTON_ACCOUNTS=a@gmail.com,b@gmail.com in .env or update PROMPT.md`
-    );
-  }
-  if (isPlaceholder(deliveryEmail)) {
-    throw new Error(
-      `Placeholder delivery email detected: ${deliveryEmail}. ` +
-      `Set a real email via DELIVER_TO_EMAIL in .env or update PROMPT.md`
-    );
-  }
 }
 
 function parseSections(raw: string): Record<string, string> {
@@ -126,21 +90,30 @@ function parseAccountsList(section: string): string[] {
 }
 
 function parseDeliveryConfig(section: string): DeliveryConfig {
-  const kvs: Record<string, string> = {};
-  for (const line of section.split("\n")) {
-    const match = line.match(/^[-*]\s*(\w+):\s*(.+)$/);
-    if (match) {
-      kvs[match[1].toLowerCase()] = match[2].trim();
+  const lines = section.split("\n");
+  let email = "";
+  let time = "";
+  let timezone = "";
+
+  for (const line of lines) {
+    const stripped = line.replace(/^[-*]\s*/, "").trim();
+
+    const emailMatch = stripped.match(/^(?:send to|email):\s*(.+)/i);
+    if (emailMatch) email = emailMatch[1].trim();
+
+    const whenMatch = stripped.match(/^(?:when|time):\s*(\S+)(?:\s*\(timezone:\s*(.+?)\))?/i);
+    if (whenMatch) {
+      time = whenMatch[1].trim();
+      if (whenMatch[2]) timezone = whenMatch[2].trim();
     }
+
+    const tzMatch = stripped.match(/^timezone:\s*(.+)/i);
+    if (tzMatch) timezone = tzMatch[1].trim();
   }
 
-  if (!kvs.email) throw new Error("PROMPT.md ## Delivery missing 'email'");
-  if (!kvs.time) throw new Error("PROMPT.md ## Delivery missing 'time'");
-  if (!kvs.timezone) throw new Error("PROMPT.md ## Delivery missing 'timezone'");
+  if (!email) throw new Error("PROMPT.md ## Daily Delivery missing 'send to'");
+  if (!time) throw new Error("PROMPT.md ## Daily Delivery missing 'when'");
+  if (!timezone) throw new Error("PROMPT.md ## Daily Delivery missing timezone");
 
-  return {
-    email: kvs.email,
-    time: kvs.time,
-    timezone: kvs.timezone,
-  };
+  return { email, time, timezone };
 }

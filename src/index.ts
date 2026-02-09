@@ -364,10 +364,10 @@ if (!command) {
   const dateArg = args.slice(1).find(a => a !== "--test");
   const date = dateArg && isValidDate(dateArg) ? dateArg : getTomorrow();
   if (testMode) {
-    const sentMarker = join(getReportsDir(), date, ".briefing-sent");
-    if (existsSync(sentMarker)) {
-      unlinkSync(sentMarker);
-      console.log(`Cleared sent marker for ${date}.`);
+    const dateDir = join(getReportsDir(), date);
+    if (existsSync(dateDir)) {
+      rmSync(dateDir, { recursive: true, force: true });
+      console.log(`Cleared reports/${date}/ for fresh run.`);
     }
   }
   await cmdSend(date);
