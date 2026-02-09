@@ -38,12 +38,21 @@ export function loadPrompt(filepath = PROMPT_PATH): PromptConfig {
     throw new Error("PROMPT.md missing required section: ## Daily Briefing Delivery");
   }
 
-  const accounts = parseAccountsList(sections["Accounts"]);
+  // Env vars override PROMPT.md
+  const accounts = process.env.CARLTON_ACCOUNTS
+    ? process.env.CARLTON_ACCOUNTS.split(",").map((a) => a.trim()).filter(Boolean)
+    : parseAccountsList(sections["Accounts"]);
   if (accounts.length === 0) {
-    throw new Error("PROMPT.md ## Accounts section has no email addresses");
+    throw new Error("No accounts configured. Set CARLTON_ACCOUNTS in .env or list them in PROMPT.md ## Accounts");
   }
 
   const delivery = parseDeliveryConfig(deliverySection);
+  const deliveryOverride = process.env.DELIVER_TO_EMAIL || process.env.CARLTON_DELIVERY_EMAIL;
+  if (deliveryOverride) {
+    delivery.email = deliveryOverride;
+  }
+
+  validateNotPlaceholder(accounts, delivery.email);
 
   return {
     system: sections["System"] || "",
@@ -52,6 +61,35 @@ export function loadPrompt(filepath = PROMPT_PATH): PromptConfig {
     briefingFormat: sections["Briefing Format"].trim(),
     researchInstructions: sections["Research Instructions"].trim(),
   };
+}
+
+const PLACEHOLDER_PATTERNS = [
+  /^my\w+@/i,
+  /^you@/i,
+  /^your\w*@/i,
+  /^user@/i,
+  /^example@/i,
+  /^test@/i,
+];
+
+function isPlaceholder(email: string): boolean {
+  return PLACEHOLDER_PATTERNS.some((p) => p.test(email));
+}
+
+function validateNotPlaceholder(accounts: string[], deliveryEmail: string) {
+  const bad = accounts.filter(isPlaceholder);
+  if (bad.length > 0) {
+    throw new Error(
+      `Placeholder account(s) detected: ${bad.join(", ")}. ` +
+      `Set real emails via CARLTON_ACCOUNTS=a@gmail.com,b@gmail.com in .env or update PROMPT.md`
+    );
+  }
+  if (isPlaceholder(deliveryEmail)) {
+    throw new Error(
+      `Placeholder delivery email detected: ${deliveryEmail}. ` +
+      `Set a real email via DELIVER_TO_EMAIL in .env or update PROMPT.md`
+    );
+  }
 }
 
 function parseSections(raw: string): Record<string, string> {

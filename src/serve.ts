@@ -27,11 +27,12 @@ function defaultSpawnFn(date: string, prompt: string) {
   const projectRoot = getProjectRoot();
   const logFile = join(getReportsDir(), date, "responses", ".claude-reply.log");
   const logFd = openSync(logFile, "w");
-  const allowedTools = "Read(reports/**),Write(reports/**),Bash(bun carlton respond *)";
+  const datePath = `reports/${date}`;
+  const allowedTools = `Read,Write(${datePath}/**),Edit(${datePath}/**),Bash(bun carlton respond *)`;
   console.log(`🤖 Spawning Claude for ${date}`);
   const proc = Bun.spawn(
     ["claude", "-p", "--model", "sonnet", "--allowedTools", allowedTools],
-    { cwd: projectRoot, stdio: ["pipe", logFd, logFd] },
+    { cwd: projectRoot, stdio: ["pipe", logFd, logFd], env: process.env },
   );
   proc.stdin.write(prompt);
   proc.stdin.end();

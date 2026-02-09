@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { loadPrompt } from "../src/prompt.ts";
 import * as fs from "fs";
 import * as path from "path";
@@ -24,7 +24,7 @@ You are Carlton.
 
 ## Delivery
 
-- email: user@example.com
+- email: sam@example.com
 - time: 05:00
 - timezone: GMT
 
@@ -37,13 +37,31 @@ Show time, location, attendees.
 Search Gmail and Drive for context.
 `;
 
+// Isolate tests from env vars that override PROMPT.md
+const ENV_VARS = ["CARLTON_ACCOUNTS", "DELIVER_TO_EMAIL", "CARLTON_DELIVERY_EMAIL"];
+let savedEnv: Record<string, string | undefined> = {};
+
 describe("loadPrompt", () => {
+  beforeEach(() => {
+    for (const key of ENV_VARS) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of ENV_VARS) {
+      if (savedEnv[key] !== undefined) process.env[key] = savedEnv[key];
+      else delete process.env[key];
+    }
+  });
+
   test("parses valid PROMPT.md", () => {
     const filepath = writeTempPrompt(VALID_PROMPT);
     const config = loadPrompt(filepath);
 
     expect(config.accounts).toEqual(["alice@gmail.com", "bob@gmail.com"]);
-    expect(config.delivery.email).toBe("user@example.com");
+    expect(config.delivery.email).toBe("sam@example.com");
     expect(config.delivery.time).toBe("05:00");
     expect(config.delivery.timezone).toBe("GMT");
     expect(config.briefingFormat).toContain("time, location, attendees");
@@ -73,11 +91,11 @@ describe("loadPrompt", () => {
       "## Accounts\n\n- not an email\n- also not"
     );
     const filepath = writeTempPrompt(content);
-    expect(() => loadPrompt(filepath)).toThrow("no email addresses");
+    expect(() => loadPrompt(filepath)).toThrow("No accounts configured");
   });
 
   test("throws if Delivery missing email", () => {
-    const content = VALID_PROMPT.replace("- email: user@example.com\n", "");
+    const content = VALID_PROMPT.replace("- email: sam@example.com\n", "");
     const filepath = writeTempPrompt(content);
     expect(() => loadPrompt(filepath)).toThrow("missing 'email'");
   });
@@ -92,5 +110,34 @@ describe("loadPrompt", () => {
     const content = VALID_PROMPT.replace("- timezone: GMT\n", "");
     const filepath = writeTempPrompt(content);
     expect(() => loadPrompt(filepath)).toThrow("missing 'timezone'");
+  });
+
+  test("throws on placeholder accounts", () => {
+    const content = VALID_PROMPT.replace(
+      "- alice@gmail.com\n- bob@gmail.com",
+      "- myworkemail@gmail.com\n- mypersonalemail@gmail.com"
+    );
+    const filepath = writeTempPrompt(content);
+    expect(() => loadPrompt(filepath)).toThrow("Placeholder account(s) detected");
+  });
+
+  test("throws on placeholder delivery email", () => {
+    const content = VALID_PROMPT.replace("sam@example.com", "you@gmail.com");
+    const filepath = writeTempPrompt(content);
+    expect(() => loadPrompt(filepath)).toThrow("Placeholder delivery email detected");
+  });
+
+  test("CARLTON_ACCOUNTS env var overrides PROMPT.md", () => {
+    process.env.CARLTON_ACCOUNTS = "real@gmail.com,other@gmail.com";
+    const filepath = writeTempPrompt(VALID_PROMPT);
+    const config = loadPrompt(filepath);
+    expect(config.accounts).toEqual(["real@gmail.com", "other@gmail.com"]);
+  });
+
+  test("DELIVER_TO_EMAIL env var overrides PROMPT.md", () => {
+    process.env.DELIVER_TO_EMAIL = "override@gmail.com";
+    const filepath = writeTempPrompt(VALID_PROMPT);
+    const config = loadPrompt(filepath);
+    expect(config.delivery.email).toBe("override@gmail.com");
   });
 });

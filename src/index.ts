@@ -269,12 +269,28 @@ async function cmdSend(date: string) {
     return;
   }
 
+  // Validate configured accounts are actually authenticated before spawning research agents
+  const auth = checkAuth();
+  const authedAccounts = new Set([...auth.gmail, ...auth.calendar, ...auth.drive]);
+  const validAccounts = prompt.accounts.filter((a) => authedAccounts.has(a));
+  if (validAccounts.length === 0) {
+    throw new Error(
+      `None of the configured accounts are authenticated: ${prompt.accounts.join(", ")}.\n` +
+      `Authenticated accounts: ${[...authedAccounts].join(", ") || "(none)"}.\n` +
+      `Run: bun carlton auth`
+    );
+  }
+
   console.log("Running research on each meeting...\n");
   const researchResults = await runResearch(date, events, prompt);
 
   const succeeded = researchResults.filter((r) => r.success).length;
   const failed = researchResults.filter((r) => !r.success).length;
   console.log(`Research complete: ${succeeded} succeeded, ${failed} failed.\n`);
+
+  if (succeeded === 0) {
+    throw new Error(`All ${failed} research tasks failed. Not running curator on empty research.`);
+  }
 
   const contextFile = join(getReportsDir(), date, "research", "curator-context.md");
   const context = buildCuratorContext(date, events, researchResults, prompt);
@@ -288,12 +304,12 @@ async function cmdSend(date: string) {
     process.exit(1);
   }
 
-  if (existsSync(sentMarker)) {
-    const messageId = readFileSync(sentMarker, "utf8").trim();
-    console.log(`✅ Briefing sent! (${messageId})`);
-  } else {
-    console.error("⚠️  Curator finished but briefing wasn't sent. Check reports/ for details.");
+  if (!existsSync(sentMarker)) {
+    throw new Error(`Curator finished but briefing wasn't sent for ${date}. Check reports/${date}/ for details.`);
   }
+
+  const messageId = readFileSync(sentMarker, "utf8").trim();
+  console.log(`✅ Briefing sent! (${messageId})`);
 }
 
 async function cmdSendBriefing(date: string) {
@@ -370,19 +386,16 @@ function extractMessageBody(message: any): string {
 async function recordReply(account: string, threadId: string, msg: any) {
   const gmail = getGmail();
 
+  const fullThread = await gmail.getThread(account, threadId);
   let replyBody = msg.snippet || "";
   let replyMessageId = "";
-  try {
-    const fullThread = await gmail.getThread(account, threadId);
-    if (!Array.isArray(fullThread) && fullThread.messages) {
-      const fullMsg = fullThread.messages.find((m: any) => m.id === msg.id);
-      if (fullMsg) {
-        replyBody = extractMessageBody(fullMsg);
-        replyMessageId = extractMessageId(fullMsg);
-      }
+
+  if (!Array.isArray(fullThread) && fullThread.messages) {
+    const fullMsg = fullThread.messages.find((m: any) => m.id === msg.id);
+    if (fullMsg) {
+      replyBody = extractMessageBody(fullMsg);
+      replyMessageId = extractMessageId(fullMsg);
     }
-  } catch (err: any) {
-    console.error(`  Could not fetch full thread: ${err.message}`);
   }
 
   const msgDate = msg.date || new Date().toISOString();
@@ -423,6 +436,8 @@ async function cmdServe() {
   const persistIds = () => writeFileSync(idsFile, [...processedIds].join("\n"), "utf8");
 
   const POLL_INTERVAL = 30_000;
+  const MAX_CONSECUTIVE_FAILURES = 5;
+  let consecutiveFailures = 0;
 
   // Seed: mark all existing messages as processed so we only react to new ones
   for (const account of accounts) {
@@ -443,6 +458,8 @@ async function cmdServe() {
   const poll = async () => {
     const pending: { account: string; threadId: string; msg: any }[] = [];
     const datesToProcess = new Set<string>();
+
+    let pollFailures = 0;
 
     for (const account of accounts) {
       try {
@@ -469,7 +486,20 @@ async function cmdServe() {
         }
       } catch (err: any) {
         console.error(`  Error polling ${account}: ${err.message}`);
+        pollFailures++;
       }
+    }
+
+    if (pollFailures === accounts.length) {
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        throw new Error(
+          `All accounts failed ${MAX_CONSECUTIVE_FAILURES} consecutive poll cycles. Exiting.`
+        );
+      }
+      console.error(`  All accounts failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} before exit)`);
+    } else {
+      consecutiveFailures = 0;
     }
 
     pending.sort((a, b) => {
@@ -502,7 +532,7 @@ async function cmdServe() {
 
 async function cmdRespond(date: string, responseNum: string) {
   const prompt = loadPrompt();
-  const deliveryEmail = process.env.CARLTON_DELIVERY_EMAIL || prompt.delivery.email;
+  const deliveryEmail = prompt.delivery.email;
   const responsesDir = join(getReportsDir(), date, "responses");
   const responseFile = join(responsesDir, `${responseNum}-response.md`);
   const body = readFileSync(responseFile, "utf8");
@@ -534,11 +564,7 @@ async function cmdRun() {
   const date = getTomorrow();
   console.log(`Carlton - Starting up\n`);
 
-  try {
-    await cmdSend(date);
-  } catch (err: any) {
-    console.error(`⚠️  Could not send briefing: ${err.message}\n`);
-  }
+  await cmdSend(date);
 
   console.log("");
   await cmdServe();

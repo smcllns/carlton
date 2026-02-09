@@ -89,6 +89,12 @@ function preflight() {
     process.exit(1);
   }
 
+  // E2E doesn't use accounts for research — set a non-placeholder value
+  // so loadPrompt() doesn't throw on PROMPT.md placeholder accounts
+  if (!process.env.CARLTON_ACCOUNTS) {
+    process.env.CARLTON_ACCOUNTS = "e2e-test@example.com";
+  }
+
   const prompt = loadPrompt();
 
   // Ensure spawned Claude processes use the same delivery email
