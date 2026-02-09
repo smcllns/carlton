@@ -11,4 +11,5 @@ reports/*
 .carlton-reply*.md
 .carlton-processed-ids
 .llm/
+data/
 .claude/settings.local.json

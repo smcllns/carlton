@@ -43,6 +43,8 @@ import {
   recordReplyDirect,
   removeLock,
 } from "./serve.ts";
+import { createQueue, type Queue } from "./queue.ts";
+import { startAgent, getAgentId } from "./agent.ts";
 import { join } from "path";
 import { createHash } from "crypto";
 import { $ } from "bun";
@@ -424,21 +426,21 @@ async function cmdServe() {
     throw new Error("No Gmail accounts configured. Run: bun carlton auth");
   }
 
-  console.log("Carlton - Listening for email replies...");
+  console.log("Carlton - Listening for email replies (SQLite queue)...");
+  console.log(`  Agent ID: ${getAgentId()}`);
   console.log(`  Monitoring: ${accounts.join(", ")}`);
   console.log(`  Delivery to: ${prompt.delivery.email}\n`);
 
-  // On startup: clean stale locks
-  cleanStaleLocks();
+  // Initialize queue
+  const dbPath = join(getProjectRoot(), "data", "queue.db");
+  const queue = createQueue(dbPath);
 
-  // On startup: trigger processing for any dates with unprocessed replies
-  const reportsDir = getReportsDir();
-  if (existsSync(reportsDir)) {
-    const dates = readdirSync(reportsDir).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
-    for (const date of dates) {
-      triggerProcessing(date);
-    }
-  }
+  // Start agent loop in background
+  const stopAgent = startAgent({
+    dbPath,
+    onMessage: (msg) => console.log(`🤖 Processing: ${msg.id} from ${msg.from}`),
+    onError: (msg, err) => console.error(`❌ Failed ${msg.id}: ${err}`),
+  });
 
   const idsFile = join(getProjectRoot(), ".carlton-processed-ids");
   const processedIds = new Set<string>(
@@ -467,9 +469,6 @@ async function cmdServe() {
   console.log(`  Seeded ${processedIds.size} existing messages.\n`);
 
   const poll = async () => {
-    const pending: { account: string; threadId: string; msg: any }[] = [];
-    const datesToProcess = new Set<string>();
-
     for (const account of accounts) {
       try {
         const results = await gmail.searchThreads(
@@ -490,35 +489,31 @@ async function cmdServe() {
             const isFromUser = !msg.from?.includes("resend.dev");
             if (!isFromUser) continue;
 
-            pending.push({ account, threadId: thread.id, msg });
+            console.log(`📩 Reply from ${msg.from}: ${msg.subject}`);
+            console.log(`   "${(msg.snippet || "").slice(0, 100)}"`);
+            persistIds();
+
+            // Get full message body
+            const { body, replyMessageId, date } = await fetchReplyDetails(gmail, account, thread.id, msg);
+
+            // Submit to queue instead of recording to files
+            queue.submit(date, msg.from || "", msg.subject || "", body, replyMessageId);
+            console.log(`   ✓ Queued for processing`);
           }
         }
       } catch (err: any) {
         console.error(`  Error polling ${account}: ${err.message}`);
       }
     }
-
-    pending.sort((a, b) => {
-      const dateA = new Date(a.msg.date || a.msg.internalDate || 0).getTime();
-      const dateB = new Date(b.msg.date || b.msg.internalDate || 0).getTime();
-      return dateA - dateB;
-    });
-
-    // Record all replies first (mechanical)
-    for (const { account, threadId, msg } of pending) {
-      console.log(`📩 Reply from ${msg.from}: ${msg.subject}`);
-      console.log(`   "${(msg.snippet || "").slice(0, 100)}"`);
-      persistIds();
-
-      const date = await recordReply(account, threadId, msg);
-      datesToProcess.add(date);
-    }
-
-    // Then trigger processing for each date (fire and forget)
-    for (const date of datesToProcess) {
-      triggerProcessing(date);
-    }
   };
+
+  // Handle shutdown
+  process.on("SIGINT", () => {
+    console.log("\nShutting down...");
+    stopAgent();
+    queue.close();
+    process.exit(0);
+  });
 
   while (true) {
     await poll();
@@ -526,13 +521,43 @@ async function cmdServe() {
   }
 }
 
-async function cmdRespond(date: string, responseNum: string) {
+/**
+ * Fetch full reply details from Gmail.
+ */
+async function fetchReplyDetails(
+  gmail: ReturnType<typeof getGmail>,
+  account: string,
+  threadId: string,
+  msg: any
+): Promise<{ body: string; replyMessageId: string; date: string }> {
+  let body = msg.snippet || "";
+  let replyMessageId = "";
+
+  try {
+    const fullThread = await gmail.getThread(account, threadId);
+    if (!Array.isArray(fullThread) && fullThread.messages) {
+      const fullMsg = fullThread.messages.find((m: any) => m.id === msg.id);
+      if (fullMsg) {
+        body = extractMessageBody(fullMsg);
+        replyMessageId = extractMessageId(fullMsg);
+      }
+    }
+  } catch (err: any) {
+    console.error(`  Could not fetch full thread: ${err.message}`);
+  }
+
+  const match = (msg.subject || "").match(/(\d{4}-\d{2}-\d{2})/);
+  const date = match ? match[1] : new Date().toISOString().split("T")[0];
+
+  return { body, replyMessageId, date };
+}
+
+async function cmdRespond(date: string, responseNum: string, messageId?: string) {
   const prompt = loadPrompt();
   const responsesDir = join(getReportsDir(), date, "responses");
   const responseFile = join(responsesDir, `${responseNum}-response.md`);
   const body = readFileSync(responseFile, "utf8");
   const replyIdFile = join(responsesDir, ".last-reply-id");
-  const threadFile = join(getReportsDir(), date, "thread.md");
   const subject = `${date} Carlton Briefing Notes`;
 
   let inReplyTo = "";
@@ -542,8 +567,18 @@ async function cmdRespond(date: string, responseNum: string) {
 
   const resendId = await sendReply(prompt.delivery.email, subject, body, inReplyTo);
 
-  appendToThread(threadFile, `Response to Reply #${parseInt(responseNum, 10)}`, body);
-  removeLock(date);
+  // Complete message in queue if messageId provided
+  if (messageId) {
+    const dbPath = join(getProjectRoot(), "data", "queue.db");
+    const queue = createQueue(dbPath);
+    queue.complete(messageId, `Sent via Resend: ${resendId}`);
+    queue.close();
+  } else {
+    // Legacy mode: update thread.md and remove lock
+    const threadFile = join(getReportsDir(), date, "thread.md");
+    appendToThread(threadFile, `Response to Reply #${parseInt(responseNum, 10)}`, body);
+    removeLock(date);
+  }
 
   console.log(`✅ Reply sent to ${prompt.delivery.email}`);
   console.log(`   Resend ID: ${resendId}`);
@@ -639,10 +674,12 @@ if (!command) {
   const date = args[1];
   const num = args[2];
   if (!date || !num) {
-    console.error("Usage: bun carlton respond <date> <NN>");
+    console.error("Usage: bun carlton respond <date> <NN> [--message-id=<id>]");
     process.exit(1);
   }
-  await cmdRespond(date, num);
+  const messageIdArg = args.find(a => a.startsWith("--message-id="));
+  const messageId = messageIdArg ? messageIdArg.split("=")[1] : undefined;
+  await cmdRespond(date, num, messageId);
 } else if (command === "reset") {
   cmdReset();
 } else if (isValidDate(command)) {

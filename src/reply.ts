@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
 import { getReportsDir } from "./config.ts";
+import type { Message } from "./queue.ts";
 
 /**
  * Get the highest reply number in a directory.
@@ -151,5 +152,69 @@ Respond to all unaddressed replies above (replies without a following response).
 2. Run: bun carlton respond ${date} ${responseNum}
 
 You MUST run both steps. Step 2 handles delivery, thread updates, and cleanup. Always run it even if you think there might be an issue — it handles errors internally.
+`;
+}
+
+/**
+ * Build the prompt for the reply Claude agent from a queue message.
+ */
+export function buildReplyPromptFromMessage(msg: Message): string {
+  const date = msg.date;
+  const reportsDir = getReportsDir();
+  const dateDir = join(reportsDir, date);
+  const threadFile = join(dateDir, "thread.md");
+  const researchDir = join(dateDir, "research");
+
+  // Read existing thread if available
+  let threadContent = "";
+  if (existsSync(threadFile)) {
+    threadContent = readFileSync(threadFile, "utf8");
+  }
+
+  // List research files if they exist
+  let researchFiles: string[] = [];
+  if (existsSync(researchDir)) {
+    researchFiles = readdirSync(researchDir).filter((f) => f.endsWith(".md"));
+  }
+
+  const researchList =
+    researchFiles.length > 0
+      ? researchFiles.map((f) => `- reports/${date}/research/${f}`).join("\n")
+      : "- (no research files available)";
+
+  const responsesDir = join(dateDir, "responses");
+  const maxReply = maxReplyNumber(responsesDir);
+  const responseNum = String(maxReply > 0 ? maxReply : 1).padStart(2, "0");
+
+  return `You are Carlton's reply handler for the ${date} briefing.
+
+## Current Message
+
+**From:** ${msg.from}
+**Subject:** ${msg.subject}
+**Message ID:** ${msg.id}
+
+\`\`\`
+${msg.body}
+\`\`\`
+
+## Thread Context
+
+${threadContent || "(No prior thread history)"}
+
+## Available Context
+
+If you need deeper context:
+${researchList}
+- Google tools: bunx gmcli, bunx gccli, bunx gdcli (read-only, use --help)
+
+Read what you need. You may not need any of it.
+
+## Respond
+
+1. Write your response to reports/${date}/responses/${responseNum}-response.md
+2. Run: bun carlton respond ${date} ${responseNum} --message-id=${msg.id}
+
+You MUST run both steps. Step 2 handles delivery, thread updates, and cleanup.
 `;
 }
