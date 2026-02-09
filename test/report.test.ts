@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  formatBasicReport,
-  createReportFiles,
-} from "../src/report.ts";
+import { formatBasicReport } from "../src/report.ts";
 import type { CalendarEvent } from "../src/calendar.ts";
-import * as fs from "fs";
-import * as path from "path";
 
 const sampleEvent: CalendarEvent = {
   id: "evt1",
@@ -67,20 +62,5 @@ describe("formatBasicReport", () => {
     };
     const report = formatBasicReport(allDay);
     expect(report).toContain("2026-02-10");
-  });
-});
-
-describe("createReportFiles", () => {
-  test("returns correct file paths", () => {
-    const paths = createReportFiles("2026-02-10", [sampleEvent]);
-    expect(paths.length).toBe(1);
-    expect(paths[0]).toContain("2026-02-10");
-    expect(paths[0]).toContain("09-00-weekly-standup.md");
-  });
-
-  test("creates date directory", () => {
-    createReportFiles("2026-02-10", [sampleEvent]);
-    const dir = path.join("reports", "2026-02-10");
-    expect(fs.existsSync(dir)).toBe(true);
   });
 });

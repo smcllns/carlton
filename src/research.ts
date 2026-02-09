@@ -1,8 +1,19 @@
 import { join } from "path";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "fs";
 import { getProjectRoot, getReportsDir } from "./config.ts";
 import type { CalendarEvent } from "./calendar.ts";
 import type { PromptConfig } from "./prompt.ts";
+
+function eventTimeSlug(event: CalendarEvent): string {
+  const timeMatch = event.start.match(/T(\d{2}):(\d{2})/);
+  const hhmm = timeMatch ? `${timeMatch[1]}${timeMatch[2]}` : "0000";
+  const slug = event.summary
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  return `${hhmm}-${slug}`;
+}
 
 export interface ResearchResult {
   event: CalendarEvent;
@@ -76,11 +87,16 @@ export async function runResearch(
 
   const promises = events.map(async (event, i): Promise<ResearchResult> => {
     const num = String(i + 1).padStart(2, "0");
-    const filepath = join(researchDir, `${num}-research.md`);
+    const filepath = join(researchDir, `${num}-RES-${eventTimeSlug(event)}.md`);
 
-    if (existsSync(filepath) && readFileSync(filepath, "utf8").trim().length > 0) {
-      console.log(`  ♻️  Skipping research for "${event.summary}" (already done)`);
-      return { event, filepath, success: true };
+    // Skip if this research slot already has a file (handles old naming too)
+    const existing = readdirSync(researchDir).find((f) => f.startsWith(`${num}-`) && f.endsWith(".md"));
+    if (existing) {
+      const existingPath = join(researchDir, existing);
+      if (readFileSync(existingPath, "utf8").trim().length > 0) {
+        console.log(`  ♻️  Skipping research for "${event.summary}" (already done)`);
+        return { event, filepath: existingPath, success: true };
+      }
     }
 
     const researchPrompt = buildResearchPrompt(

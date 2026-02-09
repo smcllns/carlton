@@ -19,11 +19,6 @@
 
 import { checkAuth } from "./google.ts";
 import { getEventsForDate, type CalendarEvent } from "./calendar.ts";
-import {
-  createReportFiles,
-  writeReport,
-  formatBasicReport,
-} from "./report.ts";
 import { loadPrompt, type PromptConfig } from "./prompt.ts";
 import { sendBriefing, sendReply, extractMessageId, type BriefingSentResult } from "./email.ts";
 import { getGmail } from "./google.ts";
@@ -222,12 +217,7 @@ async function cmdAccountsAdd(email: string) {
   console.log(`All done. Verify with: bun carlton setup`);
 }
 
-interface PrepResult {
-  events: CalendarEvent[];
-  reports: { event: CalendarEvent; content: string; filepath: string }[];
-}
-
-async function prepBriefing(date: string): Promise<PrepResult> {
+async function prepBriefing(date: string): Promise<CalendarEvent[]> {
   const auth = checkAuth();
   if (auth.calendar.length === 0) {
     throw new Error("No calendar accounts configured. Run: bun carlton auth");
@@ -235,30 +225,16 @@ async function prepBriefing(date: string): Promise<PrepResult> {
 
   console.log(`Checking calendars for: ${auth.calendar.join(", ")}\n`);
 
-  const events = await getEventsForDate(date);
+  const dateDir = join(getReportsDir(), date);
+  mkdirSync(dateDir, { recursive: true });
 
-  if (events.length === 0) {
-    return { events: [], reports: [] };
-  }
-
-  const paths = createReportFiles(date, events);
-  const reports: PrepResult["reports"] = [];
-
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    const filepath = paths[i];
-    const content = formatBasicReport(event);
-    writeReport(filepath, content);
-    reports.push({ event, content, filepath });
-  }
-
-  return { events, reports };
+  return getEventsForDate(date);
 }
 
 async function cmdPrep(date: string) {
   console.log(`Carlton - Preparing for ${date}\n`);
 
-  const { events, reports } = await prepBriefing(date);
+  const events = await prepBriefing(date);
 
   if (events.length === 0) {
     console.log("No meetings found for this date.");
@@ -267,20 +243,18 @@ async function cmdPrep(date: string) {
 
   console.log(`Found ${events.length} meeting(s):\n`);
 
-  for (const { event } of reports) {
+  for (const event of events) {
     console.log(
       `  ${formatTimeShort(event.start)} ${event.summary} (${event.attendees.length} attendees)`
     );
   }
-
-  console.log(`\nReports written to: reports/${date}/`);
 }
 
 async function cmdSend(date: string) {
   console.log(`Carlton - Preparing briefing for ${date}\n`);
 
   const prompt = loadPrompt();
-  const { events, reports } = await prepBriefing(date);
+  const events = await prepBriefing(date);
 
   if (events.length === 0) {
     console.log("No meetings found for this date. Nothing to send.");
@@ -302,7 +276,7 @@ async function cmdSend(date: string) {
   const failed = researchResults.filter((r) => !r.success).length;
   console.log(`Research complete: ${succeeded} succeeded, ${failed} failed.\n`);
 
-  const contextFile = join(getReportsDir(), date, "curator-context.md");
+  const contextFile = join(getReportsDir(), date, "research", "curator-context.md");
   const context = buildCuratorContext(date, events, researchResults, prompt);
   writeFileSync(contextFile, context, "utf8");
   console.log(`Curator context written to: ${contextFile}\n`);
