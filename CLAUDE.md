@@ -1,7 +1,7 @@
 # Carlton - Meeting Prep Assistant
 
 ## What is this?
-Carlton fetches calendar events for a given day (default: tomorrow) across multiple Google accounts, researches attendees via Gmail and Google Drive, and generates meeting prep documents.
+Carlton fetches calendar events for a given day (default: tomorrow) across multiple Google accounts, researches attendees via Gmail and Google Drive, and generates a daily briefing email.
 
 ## Architecture
 - **TypeScript + Bun** — Simple, fast, easy to reason about
@@ -17,7 +17,6 @@ Carlton fetches calendar events for a given day (default: tomorrow) across multi
 - `src/report.ts` — Report generation and file output
 - `src/research.ts` — Parallel per-meeting research via Claude agents
 - `src/curator.ts` — Curator agent that compiles research into a briefing
-- `src/reply.ts` — Reply thread handling (numbering, context, history)
 - `src/prompt.ts` — PROMPT.md parser (accounts, delivery, freeform sections)
 - `src/email.ts` — Resend email delivery (⚠️ isolated from Google — see Security below)
 - `src/config.ts` — Path helpers (project root, reports dir, memory file)
@@ -74,11 +73,5 @@ Examples:
 
 ## Backlog
 
-### SQLite for thread state
-Thread.md, lock files, and file-counting (NN-reply.md / NN-response.md) are a fragile state machine spread across the filesystem. A single SQLite db could replace all three with atomic writes, queryable history, and single-file durability. Explore whether the complexity is warranted for a personal tool. See `docs/rfc-sqlite-agent-queue.md` for a prior (overscoped) proposal — start simpler.
-
 ### Memory system redesign
-`reports/memory.txt` is freeform append-only text. Plan is structured JSONL with typed entries. The reply prompt no longer writes to it (as of 2026-02-08). The `.claude/hooks/stop-memory-prompt.sh` stop hook still asks agents to update it — update or remove that hook when the new system is ready.
-
-### Reply agent prompt robustness
-The spawned reply agent sometimes reasons its way out of calling `carlton respond` (e.g., anticipating Resend sandbox errors). Current fix is a prompt override in `src/reply.ts` telling it to ignore warnings. This is fragile. Consider: tighter tool constraints, simpler prompt, or post-spawn verification that the command was called (with retry).
+`reports/memory.txt` is freeform append-only text. Plan is structured JSONL with typed entries. The `.claude/hooks/stop-memory-prompt.sh` stop hook still asks agents to update it — update or remove that hook when the new system is ready.

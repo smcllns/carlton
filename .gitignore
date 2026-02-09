@@ -9,7 +9,5 @@ reports/*
 .env
 /carlton
 /index
-.carlton-reply*.md
-.carlton-processed-ids
 .llm/
 .claude/settings.local.json
