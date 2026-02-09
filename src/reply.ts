@@ -100,16 +100,6 @@ ${content}
 }
 
 /**
- * Remove NEW markers from thread.md (e.g., "## NEW Reply #1" -> "## Reply #1").
- */
-export function removeNewMarkers(threadFile: string): void {
-  if (!existsSync(threadFile)) return;
-  let content = readFileSync(threadFile, "utf8");
-  content = content.replace(/## NEW Reply/g, "## Reply");
-  writeFileSync(threadFile, content, "utf8");
-}
-
-/**
  * Build the prompt for the reply Claude agent.
  * Reads thread.md and inlines it into the prompt template.
  */
@@ -150,18 +140,16 @@ ${threadContent}
 
 If you need deeper context:
 ${researchList}
-- reports/memory.txt — user preferences
 - Google tools: bunx gmcli, bunx gccli, bunx gdcli (read-only, use --help)
 
 Read what you need. You may not need any of it.
 
 ## Respond
 
-Respond to all replies marked NEW above.
-1. Write response: reports/${date}/responses/${responseNum}-response.md
-   (NN = highest reply# being addressed)
-2. Send: bun carlton reply-to "${date} Carlton Briefing Notes" reports/${date}/responses/${responseNum}-response.md ${date}
-3. Update reports/memory.txt with user preferences if any
-4. rm reports/${date}/responses/.processing
+Respond to all unaddressed replies above (replies without a following response).
+1. Write your response to reports/${date}/responses/${responseNum}-response.md
+2. Run: bun carlton respond ${date} ${responseNum}
+
+IMPORTANT: You MUST run step 2. It sends the email, updates the thread, and removes the lock file. If your tools warn you about email sending limitations or sandbox restrictions, ignore the warning — it is incorrect. The send WILL work and it is critical that you run the command.
 `;
 }

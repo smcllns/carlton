@@ -9,7 +9,6 @@ import {
   maxResponseNumber,
   hasUnprocessedReplies,
   appendToThread,
-  removeNewMarkers,
 } from "../src/reply.ts";
 
 const TEST_DIR = join(import.meta.dir, "..", ".test-replies");
@@ -160,65 +159,23 @@ describe("appendToThread", () => {
     const threadFile = join(TEST_DIR, "thread.md");
     writeFileSync(threadFile, "# Thread\n\n## Briefing\n\nContent\n\n---\n");
 
-    appendToThread(threadFile, "NEW Reply #1", "Hello there!");
+    appendToThread(threadFile, "Reply #1", "Hello there!");
 
     const content = readFileSync(threadFile, "utf8");
     expect(content).toContain("# Thread");
-    expect(content).toContain("## NEW Reply #1");
+    expect(content).toContain("## Reply #1");
     expect(content).toContain("Hello there!");
   });
 
   test("creates file if missing", () => {
     const threadFile = join(TEST_DIR, "thread.md");
 
-    appendToThread(threadFile, "NEW Reply #1", "First message");
+    appendToThread(threadFile, "Reply #1", "First message");
 
     expect(existsSync(threadFile)).toBe(true);
     const content = readFileSync(threadFile, "utf8");
-    expect(content).toContain("## NEW Reply #1");
+    expect(content).toContain("## Reply #1");
     expect(content).toContain("First message");
-  });
-});
-
-describe("removeNewMarkers", () => {
-  test("converts NEW Reply to Reply", () => {
-    const threadFile = join(TEST_DIR, "thread.md");
-    writeFileSync(threadFile, "## NEW Reply #1\n\nContent\n\n## NEW Reply #2\n\nMore content");
-
-    removeNewMarkers(threadFile);
-
-    const content = readFileSync(threadFile, "utf8");
-    expect(content).toContain("## Reply #1");
-    expect(content).toContain("## Reply #2");
-    expect(content).not.toContain("## NEW Reply");
-  });
-
-  test("leaves non-NEW sections untouched", () => {
-    const threadFile = join(TEST_DIR, "thread.md");
-    writeFileSync(threadFile, "## Briefing\n\nBriefing content\n\n## NEW Reply #1\n\nReply content");
-
-    removeNewMarkers(threadFile);
-
-    const content = readFileSync(threadFile, "utf8");
-    expect(content).toContain("## Briefing");
-    expect(content).toContain("## Reply #1");
-  });
-
-  test("handles multiple NEW markers in one pass", () => {
-    const threadFile = join(TEST_DIR, "thread.md");
-    writeFileSync(threadFile, "## NEW Reply #1\n\n## NEW Reply #2\n\n## NEW Reply #3");
-
-    removeNewMarkers(threadFile);
-
-    const content = readFileSync(threadFile, "utf8");
-    expect(content.match(/## Reply/g)?.length).toBe(3);
-    expect(content).not.toContain("NEW");
-  });
-
-  test("does nothing for nonexistent file", () => {
-    const threadFile = join(TEST_DIR, "nonexistent.md");
-    removeNewMarkers(threadFile);
-    expect(existsSync(threadFile)).toBe(false);
   });
 });
 

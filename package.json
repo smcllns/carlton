@@ -9,7 +9,7 @@
   "scripts": {
     "start": "bun src/index.ts",
     "test": "bun test",
-    "test:e2e": "tmux split-window -h -c '#{pane_current_path}' 'bun test/e2e.ts; read'",
+    "test:e2e": "bun test/e2e.ts",
     "build": "bun build --compile src/index.ts --outfile carlton",
     "carlton": "bun src/index.ts"
   },

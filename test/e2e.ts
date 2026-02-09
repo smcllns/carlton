@@ -7,10 +7,10 @@
  * - recordReplyDirect() for reply handling
  * - triggerProcessing() for lock-based spawn control
  * - Claude actually runs and produces responses
- * - thread.md is correctly maintained
+ * - `carlton respond` atomically sends reply, updates thread, removes lock
  *
- * Requires: tmux, RESEND_API_KEY, Google auth configured.
- * Run: tmux new -s carlton-test 'bun test/e2e.ts'
+ * Requires: RESEND_API_KEY, Google auth configured.
+ * Run: bun test/e2e.ts
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, unlinkSync, utimesSync, statSync } from "fs";
@@ -76,11 +76,6 @@ function preflight() {
   console.log("Carlton E2E Integration Test");
   console.log("============================\n");
 
-  if (!process.env.TMUX) {
-    console.error("Must run inside tmux. Usage: tmux new -s carlton-test 'bun test/e2e.ts'");
-    process.exit(1);
-  }
-
   if (!process.env.RESEND_API_KEY) {
     try {
       const env = readFileSync(join(PROJECT_ROOT, ".env"), "utf8");
@@ -94,9 +89,15 @@ function preflight() {
     process.exit(1);
   }
 
-  loadPrompt();
+  const prompt = loadPrompt();
+
+  // Ensure spawned Claude processes use the same delivery email
+  if (!process.env.CARLTON_DELIVERY_EMAIL) {
+    process.env.CARLTON_DELIVERY_EMAIL = prompt.delivery.email;
+  }
 
   console.log(`Test date: ${TEST_DATE}`);
+  console.log(`Delivery: ${process.env.CARLTON_DELIVERY_EMAIL}`);
   console.log(`Reports dir: ${DATE_DIR}\n`);
 }
 
@@ -196,7 +197,7 @@ async function step4_recordReplyUsingRealFunction() {
 
   // Verify thread.md was updated by the real function
   const threadContent = readFileSync(THREAD_FILE, "utf8");
-  assert(threadContent.includes("## NEW Reply #1"), "thread.md missing NEW Reply #1");
+  assert(threadContent.includes("## Reply #1"), "thread.md missing Reply #1");
   assert(threadContent.includes("What time is the standup"), "thread.md missing reply content");
 
   // Verify hasUnprocessedReplies detects it
@@ -241,11 +242,15 @@ async function step7_verifyThreadAfterResponse() {
     await Bun.sleep(3000);
   }
 
-  const threadContent = readFileSync(THREAD_FILE, "utf8");
-  assert(threadContent.includes("## Response"), "thread.md missing '## Response' — reply-to not called");
-  assert(!threadContent.includes("## NEW Reply"), "thread.md still has NEW markers — removeNewMarkers not called");
+  assert(!existsSync(lockFile), "Lock file still exists — carlton respond didn't run or failed");
 
-  record("Thread updated by Claude", true, "Lock removed, NEW markers cleared, response appended");
+  const threadContent = readFileSync(THREAD_FILE, "utf8");
+  assert(threadContent.includes("## Response to Reply #1"), "thread.md missing '## Response to Reply #1' — carlton respond not called");
+
+  const responseContent = readFileSync(join(RESPONSES_DIR, "01-response.md"), "utf8");
+  assert(threadContent.includes(responseContent.slice(0, 50)), "thread.md missing response content — appendToThread failed");
+
+  record("Thread updated by carlton respond", true, "Lock removed, response appended to thread");
 }
 
 async function step8_concurrencyTest() {
@@ -312,25 +317,14 @@ async function step10_batchCompletion() {
   record("Batch completion detection", true, "No spawn when all replies processed");
 }
 
-const TMUX_WINDOWS = [`reply-${TEST_DATE}`];
-
-function listTmuxWindows(): string[] {
-  const result = Bun.spawnSync(["tmux", "list-windows", "-F", "#{window_name}"]);
-  return result.stdout.toString().trim().split("\n").filter(Boolean);
-}
-
 function step11_cleanup() {
   resetSpawnFn();
   resetSpawnCount();
 
-  for (const name of TMUX_WINDOWS) {
-    Bun.spawnSync(["tmux", "kill-window", "-t", name]);
-  }
-
   rmSync(DATE_DIR, { recursive: true, force: true });
   assert(!existsSync(DATE_DIR), `${DATE_DIR} still exists`);
 
-  record("Cleanup", true, "tmux windows killed, test data removed");
+  record("Cleanup", true, "Test data removed");
 }
 
 function printResults() {
@@ -375,10 +369,10 @@ async function main() {
 
   const hasFailures = results.some((r) => !r.passed);
   if (hasFailures) {
-    const logPath = join(DATE_DIR, "e2e-reply.log");
+    const logPath = join(RESPONSES_DIR, ".claude-reply.log");
     if (existsSync(logPath)) {
       const log = readFileSync(logPath, "utf8").trim();
-      console.log(`\n--- e2e-reply.log ---\n${log.slice(-2000)}\n`);
+      console.log(`\n--- .claude-reply.log ---\n${log.slice(-3000)}\n`);
     }
   }
 

@@ -4,10 +4,10 @@
  * This module contains the core logic for processing email replies:
  * - Lock file management to prevent concurrent Claude spawns
  * - Reply recording and thread.md updates
- * - Claude spawning via tmux
+ * - Claude spawning via Bun.spawn (headless, no tmux)
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, statSync } from "fs";
+import { existsSync, readdirSync, writeFileSync, mkdirSync, unlinkSync, statSync, openSync, closeSync } from "fs";
 import { join } from "path";
 import { getProjectRoot, getReportsDir } from "./config.ts";
 import {
@@ -20,45 +20,33 @@ import {
 } from "./reply.ts";
 
 export interface SpawnFn {
-  (date: string, promptFile: string): void;
+  (date: string, prompt: string): void;
 }
 
-// Default spawn function uses Bun.spawn with tmux
-let spawnFn: SpawnFn = (date: string, promptFile: string) => {
+function defaultSpawnFn(date: string, prompt: string) {
   const projectRoot = getProjectRoot();
-  const windowName = `reply-${date}`;
-  const claudeCmd = `claude --model sonnet -p < "${promptFile}"`;
-  console.log(`🤖 Spawning Claude in tmux window '${windowName}'`);
-  Bun.spawn(
-    ["tmux", "new-window", "-d", "-n", windowName, "-c", projectRoot, claudeCmd],
-    { stdio: ["ignore", "ignore", "ignore"] }
+  const logFile = join(getReportsDir(), date, "responses", ".claude-reply.log");
+  const logFd = openSync(logFile, "w");
+  const allowedTools = "Read(reports/**),Write(reports/**),Bash(bun carlton respond *)";
+  console.log(`🤖 Spawning Claude for ${date}`);
+  const proc = Bun.spawn(
+    ["claude", "-p", "--model", "sonnet", "--allowedTools", allowedTools],
+    { cwd: projectRoot, stdio: ["pipe", logFd, logFd] },
   );
-};
+  proc.stdin.write(prompt);
+  proc.stdin.end();
+  closeSync(logFd);
+}
 
-// Track spawn count for testing
+let spawnFn: SpawnFn = defaultSpawnFn;
 let spawnCount = 0;
 
-/**
- * Set a custom spawn function (for testing).
- */
 export function setSpawnFn(fn: SpawnFn) {
   spawnFn = fn;
 }
 
-/**
- * Reset spawn function to default.
- */
 export function resetSpawnFn() {
-  spawnFn = (date: string, promptFile: string) => {
-    const projectRoot = getProjectRoot();
-    const windowName = `reply-${date}`;
-    const claudeCmd = `claude --model sonnet -p < "${promptFile}"`;
-    console.log(`🤖 Spawning Claude in tmux window '${windowName}'`);
-    Bun.spawn(
-      ["tmux", "new-window", "-d", "-n", windowName, "-c", projectRoot, claudeCmd],
-      { stdio: ["ignore", "ignore", "ignore"] }
-    );
-  };
+  spawnFn = defaultSpawnFn;
 }
 
 /**
@@ -103,15 +91,13 @@ export function cleanStaleLocks(staleMinutes: number = 10) {
 }
 
 /**
- * Spawn Claude in tmux to process replies for a date.
+ * Spawn Claude to process replies for a date.
  * Returns true if spawned, false if skipped.
  */
-export function spawnClaudeInTmux(date: string): boolean {
+function spawnClaude(date: string): boolean {
   const prompt = buildReplyPrompt(date);
-  const promptFile = join(getReportsDir(), date, "responses", ".reply-prompt.md");
-  writeFileSync(promptFile, prompt, "utf8");
 
-  spawnFn(date, promptFile);
+  spawnFn(date, prompt);
   spawnCount++;
   return true;
 }
@@ -152,7 +138,7 @@ export function triggerProcessing(date: string, staleMinutes: number = 10): Trig
   // Write lock and spawn Claude
   writeFileSync(lockFile, new Date().toISOString(), "utf8");
   try {
-    spawnClaudeInTmux(date);
+    spawnClaude(date);
   } catch (err) {
     unlinkSync(lockFile);
     throw err;
@@ -195,8 +181,7 @@ export function recordReplyDirect(
     writeFileSync(join(responsesDir, ".last-reply-id"), replyMessageId, "utf8");
   }
 
-  // Append to thread.md with NEW marker
-  appendToThread(threadFile, `NEW Reply #${num} (${msgDate} from ${from})`, body);
+  appendToThread(threadFile, `Reply #${num} (${msgDate} from ${from})`, body);
 
   return date;
 }

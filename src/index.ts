@@ -7,9 +7,9 @@
  *   bun carlton 2026-02-10              # Prep for a specific date
  *   bun carlton send                    # Email tomorrow's briefing via Resend
  *   bun carlton send 2026-02-10         # Email briefing for specific date
- *   bun carlton serve                   # Poll for replies, spawn Claude in tmux windows (requires tmux)
+ *   bun carlton serve                   # Poll for replies, spawn Claude to respond
  *   bun carlton send-briefing 2026-02-10 # Send reports/<date>/briefing.md via email
- *   bun carlton reply-to <subj> <file> <date>  # Send a threaded reply via Resend
+ *   bun carlton respond <date> <NN>     # Atomically send response, update thread, remove lock
  *   bun carlton reset                   # Wipe reports, memory, processed IDs (keeps auth)
  *   bun carlton setup                   # Check auth status
  *   bun carlton auth                    # Show setup instructions
@@ -28,7 +28,7 @@ import { loadPrompt, type PromptConfig } from "./prompt.ts";
 import { sendBriefing, sendReply, extractMessageId, type BriefingSentResult } from "./email.ts";
 import { getGmail } from "./google.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync, appendFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync } from "fs";
 import {
   nextReplyNumber,
   writeReplyFile,
@@ -41,6 +41,7 @@ import {
   triggerProcessing,
   cleanStaleLocks,
   recordReplyDirect,
+  removeLock,
 } from "./serve.ts";
 import { join } from "path";
 import { createHash } from "crypto";
@@ -93,7 +94,6 @@ function cmdAuth() {
   console.log(`Carlton - Setup Instructions
 
 Prerequisites:
-  - tmux (brew install tmux)
   - bun (brew install oven-sh/bun/bun)
   - claude (npm install -g @anthropic-ai/claude-code)
   - gh (brew install gh, then: gh auth login)
@@ -390,11 +390,6 @@ function extractMessageBody(message: any): string {
   return message.snippet || "";
 }
 
-function parseDateFromSubject(subject: string): string | null {
-  const match = subject.match(/(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : null;
-}
-
 /**
  * Record a reply: fetch full body from Gmail, write NN-reply.md and append to thread.md
  */
@@ -421,10 +416,6 @@ async function recordReply(account: string, threadId: string, msg: any) {
 }
 
 async function cmdServe() {
-  if (!process.env.TMUX) {
-    throw new Error("serve must run inside tmux. Start a tmux session first: tmux new -s carlton");
-  }
-
   const prompt = loadPrompt();
   const gmail = getGmail();
   const accounts = gmail.listAccounts().map((a: any) => a.email);
@@ -535,39 +526,27 @@ async function cmdServe() {
   }
 }
 
-async function cmdReplyTo(subject: string, bodyFile: string, date: string) {
+async function cmdRespond(date: string, responseNum: string) {
   const prompt = loadPrompt();
-  const body = readFileSync(bodyFile, "utf8");
-  const replyIdFile = join(getReportsDir(), date, "responses", ".last-reply-id");
+  const deliveryEmail = process.env.CARLTON_DELIVERY_EMAIL || prompt.delivery.email;
+  const responsesDir = join(getReportsDir(), date, "responses");
+  const responseFile = join(responsesDir, `${responseNum}-response.md`);
+  const body = readFileSync(responseFile, "utf8");
+  const replyIdFile = join(responsesDir, ".last-reply-id");
   const threadFile = join(getReportsDir(), date, "thread.md");
+  const subject = `${date} Carlton Briefing Notes`;
 
-  // Read the reply's Gmail Message-ID for threading (thread to user's reply, not briefing)
   let inReplyTo = "";
   if (existsSync(replyIdFile)) {
     inReplyTo = readFileSync(replyIdFile, "utf8").trim();
   }
 
-  const resendId = await sendReply(prompt.delivery.email, subject, body, inReplyTo);
+  const resendId = await sendReply(deliveryEmail, subject, body, inReplyTo);
 
-  // Append response to thread.md
-  if (existsSync(threadFile)) {
-    const responseNum = bodyFile.match(/(\d+)-response\.md/)?.[1] || "00";
-    const responseSection = `
-## Response to Reply #${parseInt(responseNum, 10)}
+  appendToThread(threadFile, `Response to Reply #${parseInt(responseNum, 10)}`, body);
+  removeLock(date);
 
-${body}
-
----
-`;
-    appendFileSync(threadFile, responseSection, "utf8");
-
-    // Remove NEW markers from thread.md
-    let threadContent = readFileSync(threadFile, "utf8");
-    threadContent = threadContent.replace(/## NEW Reply/g, "## Reply");
-    writeFileSync(threadFile, threadContent, "utf8");
-  }
-
-  console.log(`✅ Reply sent to ${prompt.delivery.email}`);
+  console.log(`✅ Reply sent to ${deliveryEmail}`);
   console.log(`   Resend ID: ${resendId}`);
 }
 
@@ -657,21 +636,20 @@ if (!command) {
   await cmdSendBriefing(date);
 } else if (command === "serve") {
   await cmdServe();
-} else if (command === "reply-to") {
-  const subject = args[1];
-  const bodyFile = args[2];
-  const date = args[3];
-  if (!subject || !bodyFile || !date) {
-    console.error("Usage: bun carlton reply-to <subject> <body-file.md> <date>");
+} else if (command === "respond") {
+  const date = args[1];
+  const num = args[2];
+  if (!date || !num) {
+    console.error("Usage: bun carlton respond <date> <NN>");
     process.exit(1);
   }
-  await cmdReplyTo(subject, bodyFile, date);
+  await cmdRespond(date, num);
 } else if (command === "reset") {
   cmdReset();
 } else if (isValidDate(command)) {
   await cmdPrep(command);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|reply-to <subject> <file> <date>|reset]");
+  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|send-briefing [date]|serve|respond <date> <NN>|reset]");
   process.exit(1);
 }
