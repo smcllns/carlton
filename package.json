@@ -9,7 +9,6 @@
   "scripts": {
     "start": "bun src/index.ts",
     "test": "bun test",
-    "test:e2e": "bun test/e2e.ts",
     "send": "bun src/index.ts send --test",
     "build": "bun build --compile src/index.ts --outfile carlton",
     "carlton": "bun src/index.ts"
