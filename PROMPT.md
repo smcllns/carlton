@@ -58,7 +58,7 @@ Hey Sam, here's your briefing prep for today
 **Note from Claude:** I'm so surprised that Kevin wants to meet about goldfish, what on earth is that topic about?!
 
 ## Brief with Alex (08:15 - 08:25 am)
-Link: zoom.com/asdas
+Link: zoom.com/asdastes
 
 - Just you and Alex (your daily sync)
 - the key topics you planned to cover here were ...
