@@ -32,16 +32,15 @@ Edit `PROMPT.md` to configure your accounts, delivery address, and briefing pref
 ## Usage
 
 ```bash
-carlton send                         # Research + curate + send for tomorrow
+carlton send                         # Research + send briefing for tomorrow
 carlton send 2026-02-10              # Same, for specific date
-carlton send --resend                # Re-run curator, keep existing research
 carlton send --test                  # Nuke date folder, full fresh run
-carlton [date]                       # List events (no research)
+carlton [date]                       # List events (no research/send)
 carlton reset                        # Wipe all reports (keeps auth)
 carlton help                         # Show all commands
 ```
 
-`send` is fully automated: research agents run in parallel, curator compiles the briefing, email sends — all in one command.
+`send` runs a single Claude agent that researches your meetings and produces the briefing, then sends it via email. One command, fully automated.
 
 Output goes to `reports/YYYY-MM-DD/`.
 
@@ -58,11 +57,9 @@ PROMPT.md (config)
     ↓
 fetch calendar events (gccli)
     ↓
-research each meeting in parallel (Claude agents using gmcli, gccli, gdcli)
-    ↓ writes reports/<date>/research/*.md
-curator (claude -p) compiles research + PROMPT.md
-    ↓ writes reports/<date>/briefing.md
-send → email via Resend
+single Claude agent researches meetings (using gmcli, gccli, gdcli)
+    ↓ produces briefing markdown to stdout
+write reports/<date>/briefing.md → email via Resend
 ```
 
 | Module | Purpose |
@@ -70,8 +67,7 @@ send → email via Resend
 | `src/index.ts` | CLI entry point and commands |
 | `src/prompt.ts` | PROMPT.md parser |
 | `src/calendar.ts` | Multi-account event fetching + dedup |
-| `src/research.ts` | Parallel per-meeting research agents |
-| `src/curator.ts` | Compiles research into briefing |
+| `src/briefing.ts` | Single agent: research + briefing |
 | `src/email.ts` | Resend email delivery |
 | `src/google.ts` | Wrappers for gccli, gmcli, gdcli |
 | `src/config.ts` | Path helpers |

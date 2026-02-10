@@ -3,13 +3,12 @@
 import { checkAuth } from "./google.ts";
 import { getEventsForDate, type CalendarEvent } from "./calendar.ts";
 import { loadPrompt } from "./prompt.ts";
-import { sendBriefing, type BriefingSentResult } from "./email.ts";
+import { sendBriefing } from "./email.ts";
 import { getProjectRoot, getReportsDir } from "./config.ts";
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { $ } from "bun";
-import { runResearch } from "./research.ts";
-import { runCurator } from "./curator.ts";
+import { runBriefingAgent } from "./briefing.ts";
 
 function getTomorrow(): string {
   const d = new Date();
@@ -247,44 +246,16 @@ async function cmdSend(date: string) {
     );
   }
 
-  console.log("Running research on each meeting...\n");
-  const researchResults = await runResearch(date, events, prompt);
+  const briefing = await runBriefingAgent(date, events, prompt);
 
-  const succeeded = researchResults.filter((r) => r.success).length;
-  const failed = researchResults.filter((r) => !r.success).length;
-  console.log(`Research complete: ${succeeded} succeeded, ${failed} failed.\n`);
+  const briefingPath = join(getReportsDir(), date, "briefing.md");
+  writeFileSync(briefingPath, briefing, "utf8");
+  console.log(`Briefing written to reports/${date}/briefing.md`);
 
-  if (succeeded === 0) {
-    throw new Error(`All ${failed} research tasks failed. Not running curator on empty research.`);
-  }
-
-  const curatorOk = await runCurator(date, prompt);
-  if (!curatorOk) {
-    throw new Error("Curator failed. No briefing to send.");
-  }
-
-  await cmdSendBriefing(date);
-}
-
-async function cmdSendBriefing(date: string) {
-  const prompt = loadPrompt();
-  const briefingFile = join(getReportsDir(), date, "briefing.md");
-  const sentMarker = join(getReportsDir(), date, ".briefing-sent");
-
-  if (existsSync(sentMarker)) {
-    console.log(`Briefing for ${date} was already sent. Skipping.`);
-    return;
-  }
-
-  if (!existsSync(briefingFile)) {
-    throw new Error(`No briefing found at ${briefingFile}. Run 'bun carlton send ${date}' first.`);
-  }
-
-  const markdown = readFileSync(briefingFile, "utf8");
   const subject = prompt.subjectPattern
     ? prompt.subjectPattern.replace(/YYYY-MM-DD/g, date)
     : `[${date}] Briefing`;
-  const result = await sendBriefing(prompt.delivery.email, subject, markdown, date);
+  const result = await sendBriefing(prompt.delivery.email, subject, briefing, date);
   writeFileSync(sentMarker, JSON.stringify(result), "utf8");
 
   console.log(`✅ Briefing sent to ${prompt.delivery.email}`);
@@ -325,10 +296,8 @@ Usage: bun carlton <command> [options]
 
 Commands:
   (none)                        Prep + send briefing for tomorrow
-  send [date]                   Research + curate + send briefing (default: tomorrow)
-  send [date] --resend          Re-launch curator, keep existing research
+  send [date]                   Research + send briefing (default: tomorrow)
   send [date] --test            Nuke date folder, full fresh run
-  send-briefing [date]          Send briefing.md as email
   [date]                        List events for a date (no research/send)
   reset                         Wipe all reports (keeps auth)
 
@@ -361,7 +330,6 @@ if (!command) {
   await cmdAccountsAdd(args[2]);
 } else if (command === "send") {
   const testMode = args.includes("--test");
-  const resendMode = args.includes("--resend");
   const dateArg = args.slice(1).find(a => !a.startsWith("--"));
   const date = dateArg && isValidDate(dateArg) ? dateArg : getTomorrow();
   if (testMode) {
@@ -370,17 +338,8 @@ if (!command) {
       rmSync(dateDir, { recursive: true, force: true });
       console.log(`Cleared reports/${date}/ for fresh run.`);
     }
-  } else if (resendMode) {
-    const sentMarker = join(getReportsDir(), date, ".briefing-sent");
-    const briefingFile = join(getReportsDir(), date, "briefing.md");
-    if (existsSync(sentMarker)) unlinkSync(sentMarker);
-    if (existsSync(briefingFile)) unlinkSync(briefingFile);
-    console.log(`Cleared briefing for ${date}. Re-running curator with existing research.`);
   }
   await cmdSend(date);
-} else if (command === "send-briefing") {
-  const date = args[1] && isValidDate(args[1]) ? args[1] : getTomorrow();
-  await cmdSendBriefing(date);
 } else if (command === "reset") {
   cmdReset();
 } else if (isValidDate(command)) {
