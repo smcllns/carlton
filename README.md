@@ -1,6 +1,6 @@
 # Carlton
 
-A daily meeting briefing assistant. Fetches your calendar across multiple Google accounts, spawns parallel Claude agents to research each meeting (across Gmail, Calendar, Drive), compiles and emails you a briefing.
+A daily meeting briefing assistant. Fetches your calendar across multiple Google accounts, researches each meeting (across Gmail, Calendar, Drive), and emails you a briefing.
 
 **Read-only and isolated.** Carlton uses [Resend](https://resend.com) for email delivery, separate from Google auth. Carlton can send email to you, not as you.
 
@@ -77,3 +77,7 @@ write reports/<date>/briefing.md → email via Resend
 ```bash
 bun test    # Unit + safety tests
 ```
+
+## Skill Version
+
+A zero-code alternative lives in [`skill/`](skill/). It runs the same pipeline as a Claude Code skill instead of a TypeScript app. Simpler to set up but produces slightly less detailed briefings (CLI tools don't expose all event fields). See [`skill/compare-skill-vs-app-approaches.md`](skill/compare-skill-vs-app-approaches.md) for tradeoffs.

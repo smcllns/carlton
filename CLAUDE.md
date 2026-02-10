@@ -20,6 +20,7 @@ Carlton fetches calendar events for a given day (default: tomorrow) across multi
 - `src/config.ts` — Path helpers (project root, reports dir)
 - `PROMPT.md` — User config (accounts, delivery, briefing format, research instructions)
 - `credentials/` — Your OAuth JSON goes here (gitignored)
+- `skill/` — Zero-code Claude Code skill variant (see `skill/README.md`)
 
 ## CRITICAL: Read-Only Safety
 
