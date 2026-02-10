@@ -80,4 +80,4 @@ bun test    # Unit + safety tests
 
 ## Skill Version
 
-A zero-code alternative lives in [`skill/`](skill/). It runs the same pipeline as a Claude Code skill instead of a TypeScript app. Simpler to set up but produces slightly less detailed briefings (CLI tools don't expose all event fields). See [`skill/compare-skill-vs-app-approaches.md`](skill/compare-skill-vs-app-approaches.md) for tradeoffs.
+An alternative implementation lives in [`skill/`](skill/) that runs the same pipeline as a Claude Code skill instead of a TypeScript app. Simpler to set up but produces slightly less detailed briefings (CLI tools don't expose all event fields). See [`skill/compare-skill-vs-app-approaches.md`](skill/compare-skill-vs-app-approaches.md) for tradeoffs.

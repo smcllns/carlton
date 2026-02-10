@@ -22,7 +22,7 @@ Tested 2026-02-10 against 2026-02-11 calendar (12 events across 2 accounts).
 - **Testability.** The TS app has unit tests (`bun test`) and a safety test that scans for forbidden write calls.
 
 ### Skill version advantages
-- **Zero code.** Just `SKILL.md` + `scripts/send-briefing.sh` + `PROMPT.md`. No TypeScript, no build, no `node_modules`.
+- **Minimal code.** Just `SKILL.md` + a shell script + `PROMPT.md`. No TypeScript, no build, no `node_modules`.
 - **No preamble.** The skill version's `SKILL.md` instructions are followed more precisely — briefing starts clean with the heading. The TS app's agent sometimes leaks thinking before the heading.
 - **Easier to customize.** Edit `PROMPT.md` and `SKILL.md` directly. No code to understand.
 
@@ -35,7 +35,7 @@ Tested 2026-02-10 against 2026-02-11 calendar (12 events across 2 accounts).
 
 **TS app (default):** You want the most complete briefing with full event metadata. You're comfortable with `bun install` and a TypeScript codebase.
 
-**Skill version:** You want a zero-code setup, or you're already using Claude Code and want the simplest possible integration. Accept that some event fields (location, attendee emails) may be missing when the CLI doesn't output them.
+**Skill version:** You want a simpler setup, or you're already using Claude Code and want the most lightweight integration. Accept that some event fields (location, attendee emails) may be missing when the CLI doesn't output them.
 
 ## Retest
 

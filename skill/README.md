@@ -1,6 +1,6 @@
 # Carlton — Skill Version
 
-A zero-code alternative to the main TypeScript app. The entire pipeline is a Claude Code skill defined in `SKILL.md`, with `PROMPT.md` as the only config.
+An alternative to the main TypeScript app. The pipeline is a Claude Code skill defined in `SKILL.md` + a shell script for email delivery, with `PROMPT.md` as config.
 
 > **Note:** The TS app (root of this repo) produces better briefings because it accesses full event objects via library imports. The skill version uses CLI tools which omit some fields (location, attendee emails). See [compare-skill-vs-app-approaches.md](compare-skill-vs-app-approaches.md) for details.
 
