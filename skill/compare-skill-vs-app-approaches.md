@@ -9,16 +9,16 @@ Tested 2026-02-10 against 2026-02-11 calendar (12 events across 2 accounts).
 | Events found | 12 | 12 |
 | Briefing lines | 117 | 110 |
 | Preamble before heading | Yes (agent leak) | No |
-| Location data | Full addresses | Partial (CLI doesn't always expose location) |
-| Attendee emails | Yes (from event object) | Sometimes (CLI output varies) |
+| Location data | Full addresses | Partial (without prompting) |
+| Attendee emails | Yes | Partial (without prompting) |
 | Timezone handling | Library parses correctly | CLI outputs UTC for some events |
 | Research depth | Equivalent | Equivalent |
 
 ## Key Differences
 
 ### TS app advantages
-- **Full event objects.** The TS app imports gccli/gmcli/gdcli as libraries, giving access to complete event data: location, attendees with emails, description, conferencing links. The skill version calls these as CLIs, which output a text summary that omits some fields.
-- **Location field.** The TS app had full addresses for Craftsman and Wolves and Cubberley. The skill version found Cubberley's address via email research but missed the Craftsman and Wolves address entirely (it was only in the event's location field).
+- **Deterministic detail extraction.** The TS app programmatically extracts every field from the event object (location, attendees, description, conferencing links) and feeds them to the agent. The skill version relies on Claude choosing to look at those fields in CLI output — it *can* get the same data, but doesn't always unless PROMPT.md tells it to.
+- **Example from test:** The TS app included the full address for Craftsman and Wolves (from the event's location field). The skill version missed it — not because the CLI couldn't show it, but because Claude didn't extract it from the output. Adding "always include location" to PROMPT.md would fix this.
 - **Testability.** The TS app has unit tests (`bun test`) and a safety test that scans for forbidden write calls.
 
 ### Skill version advantages
@@ -31,11 +31,13 @@ Tested 2026-02-10 against 2026-02-11 calendar (12 events across 2 accounts).
 - Research quality (Gmail/Drive searches, LinkedIn links, coach details)
 - Overall briefing structure and usefulness
 
-## When to Use Which
+## The Core Tradeoff: Determinism vs Simplicity
 
-**TS app (default):** You want the most complete briefing with full event metadata. You're comfortable with `bun install` and a TypeScript codebase.
+The TS app is more deterministic — code extracts fields, so they're always present. The skill version can produce equally detailed output, but it depends on Claude noticing and extracting the right details from CLI output. You can close this gap by being more specific in PROMPT.md about what you want (e.g. "always include location, attendee emails, and conferencing links for every meeting").
 
-**Skill version:** You want a simpler setup, or you're already using Claude Code and want the most lightweight integration. The skill is less deterministic — Claude may not fetch as many details exhaustively as the app version, unless you specify those details in PROMPT.md.
+**TS app (default):** Deterministic detail extraction out of the box. You're comfortable with `bun install` and a TypeScript codebase.
+
+**Skill version:** Simpler setup, fully customizable via PROMPT.md. Less deterministic — Claude may not fetch as many details exhaustively as the app version, unless you specify those details in PROMPT.md.
 
 ## Retest
 
