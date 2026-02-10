@@ -5,9 +5,7 @@ credentials/*
 !credentials/example.json
 reports/*
 !reports/.gitkeep
-!reports/memory.txt
 .env
-PROMPT.md
 /carlton
 /index
 .llm/

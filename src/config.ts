@@ -15,6 +15,3 @@ export function getReportsDir(): string {
   return path.join(CARLTON_DIR, "reports");
 }
 
-export function getMemoryFile(): string {
-  return path.join(CARLTON_DIR, "reports", "memory.txt");
-}

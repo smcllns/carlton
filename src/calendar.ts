@@ -28,8 +28,8 @@ export async function getEventsForDate(date: string): Promise<CalendarEvent[]> {
     );
   }
 
-  const dayStart = `${date}T00:00:00Z`;
-  const dayEnd = `${date}T23:59:59Z`;
+  const dayStart = new Date(`${date}T00:00:00`).toISOString();
+  const dayEnd = new Date(`${date}T23:59:59`).toISOString();
 
   const allEvents: CalendarEvent[] = [];
 

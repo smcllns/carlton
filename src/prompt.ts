@@ -12,6 +12,7 @@ export interface PromptConfig {
   system: string;
   accounts: string[];
   delivery: DeliveryConfig;
+  subjectPattern: string;
   briefingFormat: string;
   researchInstructions: string;
 }
@@ -48,11 +49,14 @@ export function loadPrompt(filepath = PROMPT_PATH): PromptConfig {
 
   const delivery = parseDeliveryConfig(deliverySection);
 
+  const { subjectPattern, body: briefingBody } = parseSubjectLine(briefingSection);
+
   return {
     system: sections["System"] || "",
     accounts,
     delivery,
-    briefingFormat: briefingSection.trim(),
+    subjectPattern,
+    briefingFormat: briefingBody.trim(),
     researchInstructions: (sections["Research Instructions"] || "").trim(),
   };
 }
@@ -88,6 +92,19 @@ function parseAccountsList(section: string): string[] {
     .split("\n")
     .map((line) => line.replace(/^[-*]\s*/, "").trim())
     .filter((line) => line.includes("@"));
+}
+
+function parseSubjectLine(section: string): { subjectPattern: string; body: string } {
+  const lines = section.split("\n");
+  const subjectIdx = lines.findIndex((l) =>
+    /subject\s*line/i.test(l)
+  );
+  if (subjectIdx === -1) return { subjectPattern: "", body: section };
+
+  const match = lines[subjectIdx].match(/:\s*(.+)/);
+  const pattern = match ? match[1].trim() : "";
+  const body = lines.filter((_, i) => i !== subjectIdx).join("\n");
+  return { subjectPattern: pattern, body };
 }
 
 function parseDeliveryConfig(section: string): DeliveryConfig {

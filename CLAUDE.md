@@ -14,12 +14,11 @@ Carlton fetches calendar events for a given day (default: tomorrow) across multi
 - `src/index.ts` — CLI entry point and all commands
 - `src/google.ts` — Wrappers for gccli, gmcli, gdcli
 - `src/calendar.ts` — Multi-account event fetching + dedup
-- `src/report.ts` — Report generation and file output
 - `src/research.ts` — Parallel per-meeting research via Claude agents
 - `src/curator.ts` — Curator agent that compiles research into a briefing
 - `src/prompt.ts` — PROMPT.md parser (accounts, delivery, freeform sections)
 - `src/email.ts` — Resend email delivery (⚠️ isolated from Google — see Security below)
-- `src/config.ts` — Path helpers (project root, reports dir, memory file)
+- `src/config.ts` — Path helpers (project root, reports dir)
 - `PROMPT.md` — User config (accounts, delivery, briefing format, research instructions)
 - `credentials/` — Your OAuth JSON goes here (gitignored)
 
@@ -47,31 +46,3 @@ Carlton separates Google data access from email delivery:
 - **PROMPT.md is the user's config** — read it, don't modify it
 - **Data flow:** Google (read) → Carlton (process) → Resend (send to user)
 
-## Memory
-
-Read `reports/memory.txt` before starting any work. It contains accumulated learnings about user preferences, meeting prep style, and technical gotchas.
-
-A stop hook will remind you to update memory.txt before finishing. Record what you learned that would help another agent avoid the same mistake. Format:
-
-```
-[YYYY-MM-DD] category: one-line learning
-```
-
-Categories:
-- **preference** — How the user wants meeting prep (format, tone, emphasis)
-- **process** — Workflow improvements, what to do differently
-- **gotcha** — API quirks, auth issues, library behavior
-
-Examples:
-```
-[2026-02-07] preference: User wants attendee names, not email addresses, in report headers.
-[2026-02-07] gotcha: gccli requires Z suffix on datetime strings or returns Bad Request.
-[2026-02-07] gotcha: Subscription calendars (birthdays, holidays) throw Bad Request on listEvents — log the error and continue with other calendars.
-```
-
-@reports/memory.txt
-
-## Backlog
-
-### Memory system redesign
-`reports/memory.txt` is freeform append-only text. Plan is structured JSONL with typed entries. The `.claude/hooks/stop-memory-prompt.sh` stop hook still asks agents to update it — update or remove that hook when the new system is ready.

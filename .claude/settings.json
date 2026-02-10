@@ -39,17 +39,5 @@
       "Bash(test *)"
     ]
   },
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/stop-memory-prompt.sh"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }

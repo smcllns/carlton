@@ -7,11 +7,9 @@
     "carlton": "src/index.ts"
   },
   "scripts": {
-    "start": "bun src/index.ts",
+    "carlton": "bun src/index.ts",
     "test": "bun test",
-    "send": "bun src/index.ts send --test",
-    "build": "bun build --compile src/index.ts --outfile carlton",
-    "carlton": "bun src/index.ts"
+    "build": "bun build --compile src/index.ts --outfile carlton"
   },
   "dependencies": {
     "@mariozechner/gccli": "^0.1.2",
