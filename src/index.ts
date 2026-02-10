@@ -246,7 +246,7 @@ async function cmdSend(date: string) {
     );
   }
 
-  const briefing = await runBriefingAgent(date, events, prompt);
+  const briefing = await runBriefingAgent(date, events);
 
   const briefingPath = join(getReportsDir(), date, "briefing.md");
   writeFileSync(briefingPath, briefing, "utf8");

@@ -1,6 +1,7 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { getProjectRoot } from "./config.ts";
 import type { CalendarEvent } from "./calendar.ts";
-import type { PromptConfig } from "./prompt.ts";
 
 function formatEvents(events: CalendarEvent[]): string {
   return events.map((e, i) => {
@@ -19,49 +20,18 @@ function formatEvents(events: CalendarEvent[]): string {
 export async function runBriefingAgent(
   date: string,
   events: CalendarEvent[],
-  prompt: PromptConfig,
 ): Promise<string> {
   const projectRoot = getProjectRoot();
-  const accountList = prompt.accounts.map((a) => `- ${a}`).join("\n");
-  const systemLine = prompt.system ? `${prompt.system}\n\n` : "";
+  const promptPath = join(projectRoot, "PROMPT.md");
+  const promptContent = readFileSync(promptPath, "utf8");
 
-  const agentPrompt = `${systemLine}You are preparing a daily meeting briefing for ${date}.
-
-## Calendar Events
+  const agentPrompt = `Today is ${date}. Here are your calendar events:
 
 ${formatEvents(events)}
 
-## Accounts Available for Research
+---
 
-${accountList}
-
-## CLI Tools
-
-- \`bunx gmcli <account> search "<query>"\` — search Gmail
-- \`bunx gmcli <account> thread <thread_id>\` — read a thread
-- \`bunx gccli <account> events --query "<query>" --from <date> --to <date>\` — search calendar
-- \`bunx gdcli <account> search "<query>"\` — search Google Drive
-- \`bunx gdcli <account> download <file_id>\` — download a file
-- All tools support \`--help\` for full usage.
-
-## Research Instructions
-
-${prompt.researchInstructions}
-
-## Briefing Format
-
-${prompt.briefingFormat}
-
-## Your Task
-
-Research these meetings using the tools above, then produce the final briefing.
-
-For each meeting, decide how much research is warranted:
-- High-stakes meetings with external attendees → deep dive (email history, docs, attendee context)
-- Recurring internal syncs → light touch
-- Personal/automated calendar entries → minimal or skip
-
-Output ONLY the final briefing markdown — start directly with the heading. No preamble, thinking, or explanation before or after the briefing.`;
+${promptContent}`;
 
   const allowedTools = [
     "Bash(bunx gmcli:*)",
