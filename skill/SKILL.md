@@ -1,7 +1,7 @@
 ---
 name: carlton
-description: Daily meeting prep briefing. Fetches calendar events, researches via Gmail/Drive, sends briefing email. Usage: /carlton [send] [YYYY-MM-DD] [--test]
-allowed-tools: Bash(skill/scripts/send-briefing.sh:*), Bash(bunx gmcli:*), Bash(bunx gccli:*), Bash(bunx gdcli:*)
+description: "Daily meeting prep briefing. Fetches calendar events, researches via Gmail/Drive, sends briefing email. Usage: /carlton [send] [YYYY-MM-DD] [--test]"
+allowed-tools: "Bash(skill/scripts/send-briefing.sh:*), Bash(bunx gmcli:*), Bash(bunx gccli:*), Bash(bunx gdcli:*)"
 ---
 
 # Carlton — Meeting Prep Briefing
