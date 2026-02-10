@@ -83,8 +83,7 @@ export async function runResearch(
     "Bash(bunx gmcli:*)",
     "Bash(bunx gccli:*)",
     "Bash(bunx gdcli:*)",
-    "Read(reports/**)",
-    "Write(reports/**)",
+    `Read(reports/${date}/**)`,
   ].join(",");
 
   const promises = events.map(async (event, i): Promise<ResearchResult> => {

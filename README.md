@@ -16,6 +16,7 @@ A daily meeting briefing assistant. Fetches your calendar across multiple Google
 ```bash
 git clone https://github.com/smcllns/carlton.git && cd carlton
 bun install
+bun link                                # Makes `carlton` available globally
 
 # Google OAuth
 bun carlton credentials                 # Register your OAuth JSON from credentials/
@@ -26,33 +27,23 @@ bun carlton setup                       # Verify everything works
 cp .env.example .env                    # Add your RESEND_API_KEY
 ```
 
-Copy `PROMPT.example.md` to `PROMPT.md` and configure your accounts, delivery address, and briefing preferences. Run `bun carlton auth` for detailed setup instructions.
+Edit `PROMPT.md` to configure your accounts, delivery address, and briefing preferences. Run `bun carlton auth` for detailed setup instructions.
 
 ## Usage
 
 ```bash
-bun carlton send                 # Research tomorrow's meetings, email the briefing
-bun carlton send 2026-02-10     # Briefing for a specific date
-bun carlton send --test          # Clear previous run and redo everything fresh
-bun carlton 2026-02-10           # List events only (no research, no email)
+carlton send                         # Research + curate + send for tomorrow
+carlton send 2026-02-10              # Same, for specific date
+carlton send --resend                # Re-run curator, keep existing research
+carlton send --test                  # Nuke date folder, full fresh run
+carlton [date]                       # List events (no research)
+carlton reset                        # Wipe all reports (keeps auth)
+carlton help                         # Show all commands
 ```
 
+`send` is fully automated: research agents run in parallel, curator compiles the briefing, email sends — all in one command.
+
 Output goes to `reports/YYYY-MM-DD/`.
-
-## Commands
-
-| Command | Purpose |
-|---------|---------|
-| `bun carlton` | Research tomorrow + email briefing |
-| `bun carlton send [date]` | Research + email briefing |
-| `bun carlton send --test` | Wipe date folder and re-run from scratch |
-| `bun carlton send-briefing [date]` | Re-send existing briefing (skip research) |
-| `bun carlton [date]` | List events for a date (no email) |
-| `bun carlton reset` | Wipe all reports (keeps auth) |
-| `bun carlton setup` | Verify auth status |
-| `bun carlton auth` | Setup instructions |
-| `bun carlton credentials` | Register OAuth JSON |
-| `bun carlton accounts add <email>` | Add a Google account |
 
 ## Security
 
@@ -69,9 +60,9 @@ fetch calendar events (gccli)
     ↓
 research each meeting in parallel (Claude agents using gmcli, gccli, gdcli)
     ↓ writes reports/<date>/research/*.md
-curator agent reads all research + PROMPT.md briefing format
+curator (claude -p) compiles research + PROMPT.md
     ↓ writes reports/<date>/briefing.md
-send briefing email (Resend)
+send → email via Resend
 ```
 
 | Module | Purpose |
@@ -83,7 +74,6 @@ send briefing email (Resend)
 | `src/curator.ts` | Compiles research into briefing |
 | `src/email.ts` | Resend email delivery |
 | `src/google.ts` | Wrappers for gccli, gmcli, gdcli |
-| `src/report.ts` | Fallback report formatting |
 | `src/config.ts` | Path helpers |
 
 ## Testing

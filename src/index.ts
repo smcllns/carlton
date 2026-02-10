@@ -1,20 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Carlton - Meeting prep assistant
- *
- * Usage:
- *   bun carlton                          # Prep + send briefing for tomorrow
- *   bun carlton 2026-02-10              # Prep for a specific date (list events)
- *   bun carlton send                    # Prep + send briefing for tomorrow
- *   bun carlton send 2026-02-10         # Prep + send briefing for specific date
- *   bun carlton send --test             # Clear sent marker and resend
- *   bun carlton send-briefing 2026-02-10 # Send an already-generated briefing.md
- *   bun carlton reset                   # Wipe reports (keeps auth)
- *   bun carlton setup                   # Check auth status
- *   bun carlton auth                    # Show setup instructions
- *   bun carlton credentials             # Register OAuth credentials
- *   bun carlton accounts add you@gmail  # Add account to all services
- */
 
 import { checkAuth } from "./google.ts";
 import { getEventsForDate, type CalendarEvent } from "./calendar.ts";
@@ -25,7 +9,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync
 import { join } from "path";
 import { $ } from "bun";
 import { runResearch } from "./research.ts";
-import { buildCuratorContext, runCurator } from "./curator.ts";
+import { runCurator } from "./curator.ts";
 
 function getTomorrow(): string {
   const d = new Date();
@@ -274,24 +258,12 @@ async function cmdSend(date: string) {
     throw new Error(`All ${failed} research tasks failed. Not running curator on empty research.`);
   }
 
-  const contextFile = join(getReportsDir(), date, "research", "curator-context.md");
-  const context = buildCuratorContext(date, events, researchResults, prompt);
-  writeFileSync(contextFile, context, "utf8");
-  console.log(`Curator context written to: ${contextFile}\n`);
-
-  const exitCode = await runCurator(date, contextFile);
-
-  if (exitCode !== 0) {
-    console.error(`❌ Curator exited with code ${exitCode}.`);
-    process.exit(1);
+  const curatorOk = await runCurator(date, prompt);
+  if (!curatorOk) {
+    throw new Error("Curator failed. No briefing to send.");
   }
 
-  if (!existsSync(sentMarker)) {
-    throw new Error(`Curator finished but briefing wasn't sent for ${date}. Check reports/${date}/ for details.`);
-  }
-
-  const messageId = readFileSync(sentMarker, "utf8").trim();
-  console.log(`✅ Briefing sent! (${messageId})`);
+  await cmdSendBriefing(date);
 }
 
 async function cmdSendBriefing(date: string) {
@@ -309,8 +281,9 @@ async function cmdSendBriefing(date: string) {
   }
 
   const markdown = readFileSync(briefingFile, "utf8");
-  const firstLine = markdown.match(/^#\s+(.+)/m);
-  const subject = firstLine ? firstLine[1].trim() : `${date} Carlton Briefing`;
+  const subject = prompt.subjectPattern
+    ? prompt.subjectPattern.replace(/YYYY-MM-DD/g, date)
+    : `[${date}] Briefing`;
   const result = await sendBriefing(prompt.delivery.email, subject, markdown, date);
   writeFileSync(sentMarker, JSON.stringify(result), "utf8");
 
@@ -329,7 +302,7 @@ function cmdReset() {
   const deleted: string[] = [];
 
   if (existsSync(reportsDir)) {
-    const entries = readdirSync(reportsDir).filter((f) => f !== "memory.txt" && f !== ".gitkeep");
+    const entries = readdirSync(reportsDir).filter((f) => f !== ".gitkeep");
     for (const entry of entries) {
       rmSync(join(reportsDir, entry), { recursive: true, force: true });
       deleted.push(`reports/${entry}`);
@@ -345,6 +318,30 @@ function cmdReset() {
   }
 }
 
+function cmdHelp() {
+  console.log(`Carlton - Meeting prep assistant
+
+Usage: bun carlton <command> [options]
+
+Commands:
+  (none)                        Prep + send briefing for tomorrow
+  send [date]                   Research + curate + send briefing (default: tomorrow)
+  send [date] --resend          Re-launch curator, keep existing research
+  send [date] --test            Nuke date folder, full fresh run
+  send-briefing [date]          Send briefing.md as email
+  [date]                        List events for a date (no research/send)
+  reset                         Wipe all reports (keeps auth)
+
+Setup:
+  auth                          Show setup instructions
+  credentials                   Register OAuth credentials
+  accounts add <email>          Add a Google account
+  setup                         Check auth status
+  help                          Show this help
+
+Dates are YYYY-MM-DD format. Defaults to tomorrow if omitted.`);
+}
+
 // --- Main ---
 
 const args = process.argv.slice(2);
@@ -352,6 +349,8 @@ const command = args[0];
 
 if (!command) {
   await cmdSend(getTomorrow());
+} else if (command === "help" || command === "--help" || command === "-h") {
+  cmdHelp();
 } else if (command === "setup") {
   await cmdSetup();
 } else if (command === "auth") {
@@ -362,7 +361,8 @@ if (!command) {
   await cmdAccountsAdd(args[2]);
 } else if (command === "send") {
   const testMode = args.includes("--test");
-  const dateArg = args.slice(1).find(a => a !== "--test");
+  const resendMode = args.includes("--resend");
+  const dateArg = args.slice(1).find(a => !a.startsWith("--"));
   const date = dateArg && isValidDate(dateArg) ? dateArg : getTomorrow();
   if (testMode) {
     const dateDir = join(getReportsDir(), date);
@@ -370,6 +370,12 @@ if (!command) {
       rmSync(dateDir, { recursive: true, force: true });
       console.log(`Cleared reports/${date}/ for fresh run.`);
     }
+  } else if (resendMode) {
+    const sentMarker = join(getReportsDir(), date, ".briefing-sent");
+    const briefingFile = join(getReportsDir(), date, "briefing.md");
+    if (existsSync(sentMarker)) unlinkSync(sentMarker);
+    if (existsSync(briefingFile)) unlinkSync(briefingFile);
+    console.log(`Cleared briefing for ${date}. Re-running curator with existing research.`);
   }
   await cmdSend(date);
 } else if (command === "send-briefing") {
@@ -381,6 +387,6 @@ if (!command) {
   await cmdPrep(command);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error("Usage: bun carlton [date|setup|auth|credentials|accounts add <email>|send [date]|reset]");
+  cmdHelp();
   process.exit(1);
 }
