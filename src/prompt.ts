@@ -42,12 +42,17 @@ export function loadPrompt(filepath = PROMPT_PATH): PromptConfig {
     throw new Error("PROMPT.md missing required section: ## Briefing Format");
   }
 
-  const accounts = parseAccountsList(accountsSection);
+  const accounts = process.env.CARLTON_ACCOUNTS
+    ? process.env.CARLTON_ACCOUNTS.split(",").map((a) => a.trim())
+    : parseAccountsList(accountsSection);
   if (accounts.length === 0) {
-    throw new Error("No accounts configured in PROMPT.md ## Calendars to Include");
+    throw new Error("No accounts configured in PROMPT.md ## Calendars to Include (or set CARLTON_ACCOUNTS)");
   }
 
   const delivery = parseDeliveryConfig(deliverySection);
+  if (process.env.CARLTON_DELIVERY_EMAIL) {
+    delivery.email = process.env.CARLTON_DELIVERY_EMAIL;
+  }
 
   const { subjectPattern, body: briefingBody } = parseSubjectLine(briefingSection);
 
