@@ -35,7 +35,7 @@ Tested 2026-02-10 against 2026-02-11 calendar (12 events across 2 accounts).
 
 **TS app (default):** You want the most complete briefing with full event metadata. You're comfortable with `bun install` and a TypeScript codebase.
 
-**Skill version:** You want a simpler setup, or you're already using Claude Code and want the most lightweight integration. Accept that some event fields (location, attendee emails) may be missing when the CLI doesn't output them.
+**Skill version:** You want a simpler setup, or you're already using Claude Code and want the most lightweight integration. The skill is less deterministic — Claude may not fetch as many details exhaustively as the app version, unless you specify those details in PROMPT.md.
 
 ## Retest
 
